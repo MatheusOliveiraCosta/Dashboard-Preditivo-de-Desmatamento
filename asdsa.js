@@ -1,3 +1,0 @@
-function(whataver){
- let everything
-}
