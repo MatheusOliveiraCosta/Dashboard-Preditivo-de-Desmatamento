@@ -1,0 +1,151 @@
+{
+  "geral": {
+    "serie_historica": [
+      {
+        "ano": 2018,
+        "area_km2": 7536
+      },
+      {
+        "ano": 2019,
+        "area_km2": 10129
+      },
+      {
+        "ano": 2020,
+        "area_km2": 10851
+      },
+      {
+        "ano": 2021,
+        "area_km2": 13038
+      },
+      {
+        "ano": 2022,
+        "area_km2": 11594
+      },
+      {
+        "ano": 2023,
+        "area_km2": 9001
+      }
+    ],
+    "projecao": [
+      {
+        "ano": 2024,
+        "valor_projetado_km2": 8450,
+        "intervalo_inferior": 7300,
+        "intervalo_superior": 9700
+      },
+      {
+        "ano": 2025,
+        "valor_projetado_km2": 8050,
+        "intervalo_inferior": 6500,
+        "intervalo_superior": 9700
+      },
+      {
+        "ano": 2026,
+        "valor_projetado_km2": 7800,
+        "intervalo_inferior": 5900,
+        "intervalo_superior": 9800
+      },
+      {
+        "ano": 2027,
+        "valor_projetado_km2": 7650,
+        "intervalo_inferior": 5400,
+        "intervalo_superior": 9900
+      },
+      {
+        "ano": 2028,
+        "valor_projetado_km2": 7600,
+        "intervalo_inferior": 4900,
+        "intervalo_superior": 10300
+      },
+      {
+        "ano": 2029,
+        "valor_projetado_km2": 7450,
+        "intervalo_inferior": 4500,
+        "intervalo_superior": 10400
+      },
+      {
+        "ano": 2030,
+        "valor_projetado_km2": 7300,
+        "intervalo_inferior": 4100,
+        "intervalo_superior": 10500
+      }
+    ],
+    "ponto_estabilizacao": 2028,
+    "insight": "Se a tendência atual continuar, a área desmatada no Brasil deve chegar a cerca de 7.300 km² em 2030, uma queda de 19% em relação a 2023 (9.001 km²), com margem de incerteza entre 4.100 e 10.500 km². O modelo indica estabilização a partir de 2028."
+  },
+  "regional": {
+    "serie_historica": [
+      {
+        "ano": 2018,
+        "area_km2": 2900
+      },
+      {
+        "ano": 2019,
+        "area_km2": 4200
+      },
+      {
+        "ano": 2020,
+        "area_km2": 4900
+      },
+      {
+        "ano": 2021,
+        "area_km2": 5200
+      },
+      {
+        "ano": 2022,
+        "area_km2": 4100
+      },
+      {
+        "ano": 2023,
+        "area_km2": 3300
+      }
+    ],
+    "projecao": [
+      {
+        "ano": 2024,
+        "valor_projetado_km2": 3100,
+        "intervalo_inferior": 2600,
+        "intervalo_superior": 3600
+      },
+      {
+        "ano": 2025,
+        "valor_projetado_km2": 3010,
+        "intervalo_inferior": 2350,
+        "intervalo_superior": 3670
+      },
+      {
+        "ano": 2026,
+        "valor_projetado_km2": 2960,
+        "intervalo_inferior": 2150,
+        "intervalo_superior": 3770
+      },
+      {
+        "ano": 2027,
+        "valor_projetado_km2": 2935,
+        "intervalo_inferior": 1950,
+        "intervalo_superior": 3920
+      },
+      {
+        "ano": 2028,
+        "valor_projetado_km2": 2915,
+        "intervalo_inferior": 1750,
+        "intervalo_superior": 4080
+      },
+      {
+        "ano": 2029,
+        "valor_projetado_km2": 2890,
+        "intervalo_inferior": 1550,
+        "intervalo_superior": 4230
+      },
+      {
+        "ano": 2030,
+        "valor_projetado_km2": 2870,
+        "intervalo_inferior": 1350,
+        "intervalo_superior": 4390
+      }
+    ],
+    "ponto_estabilizacao": 2027,
+    "insight": "Se a tendência atual continuar, a área desmatada na região deve chegar a cerca de 2.870 km² em 2030, uma queda de 13% em relação a 2023 (3.300 km²), com margem de incerteza entre 1.350 e 4.390 km². O modelo indica estabilização a partir de 2027."
+  },
+  "atualizado_em": "2026-08-15T00:00:00Z"
+}

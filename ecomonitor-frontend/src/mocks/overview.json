@@ -1,0 +1,95 @@
+{
+  "kpis": [
+    {
+      "region": "BR",
+      "area_desmatada_km2": 9001,
+      "variacao_percentual": -22,
+      "ano_referencia": 2023
+    }
+  ],
+  "bioma_critico": "Amazônia",
+  "serie_historica": [
+    {
+      "ano": 2004,
+      "area_km2": 27772
+    },
+    {
+      "ano": 2005,
+      "area_km2": 19014
+    },
+    {
+      "ano": 2006,
+      "area_km2": 14286
+    },
+    {
+      "ano": 2007,
+      "area_km2": 11651
+    },
+    {
+      "ano": 2008,
+      "area_km2": 12911
+    },
+    {
+      "ano": 2009,
+      "area_km2": 7464
+    },
+    {
+      "ano": 2010,
+      "area_km2": 7000
+    },
+    {
+      "ano": 2011,
+      "area_km2": 6418
+    },
+    {
+      "ano": 2012,
+      "area_km2": 4571
+    },
+    {
+      "ano": 2013,
+      "area_km2": 5891
+    },
+    {
+      "ano": 2014,
+      "area_km2": 5012
+    },
+    {
+      "ano": 2015,
+      "area_km2": 6207
+    },
+    {
+      "ano": 2016,
+      "area_km2": 7893
+    },
+    {
+      "ano": 2017,
+      "area_km2": 6947
+    },
+    {
+      "ano": 2018,
+      "area_km2": 7536
+    },
+    {
+      "ano": 2019,
+      "area_km2": 10129
+    },
+    {
+      "ano": 2020,
+      "area_km2": 10851
+    },
+    {
+      "ano": 2021,
+      "area_km2": 13038
+    },
+    {
+      "ano": 2022,
+      "area_km2": 11594
+    },
+    {
+      "ano": 2023,
+      "area_km2": 9001
+    }
+  ],
+  "insight": "A área desmatada em 2023 foi de 9.001 km², uma queda de 22% em relação a 2022. Apesar da redução, o valor ainda é maior que o registrado em 2012, o menor da série.",
+  "atualizado_em": "2026-08-15T00:00:00Z"
+}

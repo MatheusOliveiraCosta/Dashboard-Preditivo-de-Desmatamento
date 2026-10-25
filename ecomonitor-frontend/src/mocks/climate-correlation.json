@@ -1,0 +1,73 @@
+{
+  "serie": [
+    {
+      "ano": 2014,
+      "area_km2": 5012,
+      "temperatura_media_c": 26.3,
+      "precipitacao_mm": 2350
+    },
+    {
+      "ano": 2015,
+      "area_km2": 6207,
+      "temperatura_media_c": 26.9,
+      "precipitacao_mm": 2050
+    },
+    {
+      "ano": 2016,
+      "area_km2": 7893,
+      "temperatura_media_c": 27.1,
+      "precipitacao_mm": 1980
+    },
+    {
+      "ano": 2017,
+      "area_km2": 6947,
+      "temperatura_media_c": 26.5,
+      "precipitacao_mm": 2300
+    },
+    {
+      "ano": 2018,
+      "area_km2": 7536,
+      "temperatura_media_c": 26.4,
+      "precipitacao_mm": 2250
+    },
+    {
+      "ano": 2019,
+      "area_km2": 10129,
+      "temperatura_media_c": 26.7,
+      "precipitacao_mm": 2150
+    },
+    {
+      "ano": 2020,
+      "area_km2": 10851,
+      "temperatura_media_c": 26.6,
+      "precipitacao_mm": 2200
+    },
+    {
+      "ano": 2021,
+      "area_km2": 13038,
+      "temperatura_media_c": 26.4,
+      "precipitacao_mm": 2280
+    },
+    {
+      "ano": 2022,
+      "area_km2": 11594,
+      "temperatura_media_c": 26.5,
+      "precipitacao_mm": 2300
+    },
+    {
+      "ano": 2023,
+      "area_km2": 9001,
+      "temperatura_media_c": 27.3,
+      "precipitacao_mm": 1900
+    }
+  ],
+  "indicadores": {
+    "taxa_supressao_pct": 8.4,
+    "anomalia_termica_c": 0.6,
+    "deficit_hidrico_mm": -276,
+    "coef_correlacao_temperatura": -0.07,
+    "coef_correlacao_precipitacao": 0.08
+  },
+  "insight": "Entre 2014 e 2023, a correlação entre o desmatamento e a temperatura média foi de -0,07 e, entre o desmatamento e a precipitação, de 0,08. Em 2023, a temperatura ficou 0,6 °C acima da média do período e a chuva 276 mm abaixo dela.",
+  "atualizado_em": "2026-08-15T00:00:00Z"
+}
