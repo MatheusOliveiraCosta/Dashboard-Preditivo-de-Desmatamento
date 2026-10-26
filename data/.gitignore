@@ -1,0 +1,3 @@
+# Dados brutos (PRODES, MapBiomas, INMET) não vão para o GitHub
+raw/*/*
+!raw/*/.gitkeep
