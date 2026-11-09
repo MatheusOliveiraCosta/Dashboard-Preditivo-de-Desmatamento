@@ -1,4 +1,4 @@
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import query
@@ -6,8 +6,8 @@ from app.routers import climate, localidades, overview, projection
 
 app = FastAPI(
     title="EcoMonitor API",
-    description="Contrato em docs/arquitetura-contrato-api.md. "
-                "ATENÇÃO: os dados ainda são MOCK (fictícios).",
+    description="API somente de leitura (sem autenticação). Dados: PRODES/INPE, MapBiomas e INMET, "
+                "carregados pelo ETL. Contrato em docs/arquitetura-contrato-api.md.",
 )
 
 app.add_middleware(
@@ -16,13 +16,6 @@ app.add_middleware(
     allow_methods=["GET"],
     allow_headers=["*"],
 )
-
-
-@app.middleware("http")
-async def marcar_dados_mock(request: Request, call_next):
-    response = await call_next(request)
-    response.headers["X-Data-Source"] = "mock"
-    return response
 
 
 api = APIRouter(prefix="/api/v1")

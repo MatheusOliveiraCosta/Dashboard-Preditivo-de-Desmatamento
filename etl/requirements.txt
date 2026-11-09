@@ -1,5 +1,8 @@
 pandas==2.2.3
 scikit-learn==1.6.0
+scipy==1.15.1
 psycopg2-binary==2.9.10
 openpyxl==3.1.5
 python-dotenv==1.0.1
+# Opcional: só é usado se GEMINI_API_KEY e GEMINI_MODEL estiverem definidos
+google-genai>=1.0

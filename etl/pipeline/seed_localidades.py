@@ -29,4 +29,5 @@ def executar(conn):
             cur.execute(SQL, (nome, uf, "ESTADO", regiao))
         for nome in BIOMAS:
             cur.execute(SQL, (nome, None, "BIOMA", None))
-    return len(ESTADOS) + len(BIOMAS)
+        cur.execute(SQL, ("Brasil", None, "PAIS", None))  # série/projeção/insight do país
+    return len(ESTADOS) + len(BIOMAS) + 1

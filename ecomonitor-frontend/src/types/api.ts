@@ -1,6 +1,7 @@
 // Interfaces espelhando o contrato da API (v1). Ajuste aqui se o contrato mudar.
 
-export type TipoLocalidade = 'ESTADO' | 'BIOMA'
+// PAIS é o registro "Brasil" (aparece em /localidades; os filtros mostram só ESTADO e BIOMA)
+export type TipoLocalidade = 'PAIS' | 'ESTADO' | 'BIOMA'
 
 export interface Localidade {
   id: number
@@ -13,7 +14,7 @@ export interface Localidade {
 export interface Kpi {
   region: string
   area_desmatada_km2: number
-  variacao_percentual: number
+  variacao_percentual: number | null // null se não houver ano anterior para comparar
   ano_referencia: number
 }
 
@@ -30,20 +31,18 @@ export interface OverviewParams {
 
 export interface OverviewResponse {
   kpis: Kpi[]
-  // PENDENTE NO CONTRATO: o card "Bioma crítico" (RF06) precisa deste campo,
-  // que ainda não consta em /api/v1/overview.
-  bioma_critico: string
+  bioma_critico: string | null // bioma com a maior área desmatada no ano de referência (RF06)
   serie_historica: SeriePonto[]
-  insight: string
-  atualizado_em: string
+  insight: string | null // texto gerado pelo ETL (RF18); null se ainda não foi gerado
+  atualizado_em: string | null // última atualização bem-sucedida dos dados (UTC)
 }
 
 // ---- /api/v1/climate-correlation ----
 
 export interface ClimateCorrelationParams {
   localidade?: number | null // ausente/null = Brasil
-  start?: number
-  end?: number
+  ano_inicio?: number
+  ano_fim?: number
 }
 
 export interface ClimaPonto {
@@ -53,28 +52,27 @@ export interface ClimaPonto {
   precipitacao_mm: number
 }
 
-// PENDENTE NO CONTRATO: os 3 cards da tela (RF08) precisam destes indicadores,
-// que ainda não constam na resposta de /api/v1/climate-correlation.
+// Indicadores dos 3 cards da tela (RF08), calculados pela API para o período devolvido.
 export interface IndicadoresClimaticos {
-  taxa_supressao_pct: number
+  taxa_supressao_pct: number | null
   anomalia_termica_c: number
   deficit_hidrico_mm: number
-  coef_correlacao_temperatura: number
-  coef_correlacao_precipitacao: number
+  coef_correlacao_temperatura: number | null // null com menos de 3 anos ou série constante
+  coef_correlacao_precipitacao: number | null
 }
 
 export interface ClimateCorrelationResponse {
   serie: ClimaPonto[]
   indicadores: IndicadoresClimaticos
-  insight: string
-  atualizado_em: string
+  insight: string | null
+  atualizado_em: string | null
 }
 
 // ---- /api/v1/projection ----
 
 export interface ProjectionParams {
   localidade?: number | null // ausente/null = só a visão Geral (Brasil)
-  horizon?: number
+  horizonte?: number // anos à frente (padrão: todos os calculados)
 }
 
 export interface ProjecaoPonto {
@@ -87,16 +85,16 @@ export interface ProjecaoPonto {
 export interface VisaoProjecao {
   serie_historica: SeriePonto[]
   projecao: ProjecaoPonto[]
-  // PENDENTE: critério do "Ponto de Estabilização". No mock, é o primeiro ano projetado
-  // com variação anual menor que 1% (em módulo). Definir com a equipe de Dados/IA.
+  // PROVISÓRIO: primeiro ano projetado com variação anual menor que 1% (em módulo).
+  // O critério ainda precisa ser validado com a equipe de Dados/IA.
   ponto_estabilizacao: number | null
-  insight: string
+  insight: string | null
 }
 
-// PENDENTE NO CONTRATO: o Figma alterna entre Geral e Regional, e cada visão precisa do
-// próprio histórico, projeção e texto. O contrato atual traz só uma `serie_historica`.
+// Cada visão (Geral = Brasil, Regional = localidade escolhida) traz o próprio histórico,
+// projeção e texto, porque o Figma alterna entre as duas.
 export interface ProjectionResponse {
   geral: VisaoProjecao
   regional: VisaoProjecao | null // null quando nenhuma localidade está selecionada
-  atualizado_em: string
+  atualizado_em: string | null
 }

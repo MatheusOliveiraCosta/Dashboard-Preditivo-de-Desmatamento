@@ -46,6 +46,9 @@ services:
     profiles: ["etl"]
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      # Opcionais: reescrita dos textos de insight com o Gemini (sem eles, usa templates)
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
     volumes:
       - ./etl:/app
       - ./data:/data

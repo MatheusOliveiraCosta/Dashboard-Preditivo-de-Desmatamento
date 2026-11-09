@@ -1,70 +1,76 @@
-"""modelos de resposta (contrato de api) O fastapi gera o /docs a partir deles"""
+"""Formato das respostas da API (contrato v1). O frontend espelha estes tipos em
+ecomonitor-frontend/src/types/api.ts. Detalhes em docs/arquitetura-contrato-api.md."""
 from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel
 
 
-class Localidade(BaseModel):
-    codigo: str
+class LocalidadeOut(BaseModel):
+    id: int
     nome: str
-    tipo: Literal["estado", "bioma"]
-    sigla_uf: str | None = None
-    regiao: str | None = None
+    sigla_uf: str | None
+    tipo: Literal["PAIS", "ESTADO", "BIOMA"]
+    regiao: str | None
 
 
-# ---------- /overview ----------
 class Kpi(BaseModel):
     region: str
     area_desmatada_km2: float
-    variacao_percentual: float | None  # None se não houver ano anterior
+    variacao_percentual: float | None
     ano_referencia: int
 
 
-class PontoSerie(BaseModel):
+class SeriePonto(BaseModel):
     ano: int
     area_km2: float
 
 
-class OverviewResponse(BaseModel):
+class OverviewOut(BaseModel):
     kpis: list[Kpi]
-    serie_historica: list[PontoSerie]
-    insight: str
-    atualizado_em: datetime
+    bioma_critico: str | None
+    serie_historica: list[SeriePonto]
+    insight: str | None
+    atualizado_em: datetime | None
 
 
-# ---------- /climate-correlation ----------
-class PontoClima(BaseModel):
+class ClimaPonto(BaseModel):
     ano: int
     area_km2: float
     temperatura_media_c: float
     precipitacao_mm: float
 
 
-class Correlacao(BaseModel):
-    """Coeficiente de Pearson (-1 a 1). None se o período for curto demais."""
-    temperatura: float | None
-    precipitacao: float | None
+class IndicadoresClimaticos(BaseModel):
+    taxa_supressao_pct: float | None
+    anomalia_termica_c: float
+    deficit_hidrico_mm: float
+    coef_correlacao_temperatura: float | None
+    coef_correlacao_precipitacao: float | None
 
 
-class ClimateResponse(BaseModel):
-    serie: list[PontoClima]
-    correlacao: Correlacao
-    insight: str
-    atualizado_em: datetime
+class ClimateCorrelationOut(BaseModel):
+    serie: list[ClimaPonto]
+    indicadores: IndicadoresClimaticos
+    insight: str | None
+    atualizado_em: datetime | None
 
 
-# ---------- /projection ----------
-class PontoProjecao(BaseModel):
+class ProjecaoPonto(BaseModel):
     ano: int
-    valor_km2: float
+    valor_projetado_km2: float
     intervalo_inferior: float
     intervalo_superior: float
 
 
-class ProjectionResponse(BaseModel):
-    historico: list[PontoSerie]
-    projecao_regional: list[PontoProjecao]
-    projecao_nacional: list[PontoProjecao]
-    insight: str
-    atualizado_em: datetime
+class VisaoProjecao(BaseModel):
+    serie_historica: list[SeriePonto]
+    projecao: list[ProjecaoPonto]
+    ponto_estabilizacao: int | None
+    insight: str | None
+
+
+class ProjectionOut(BaseModel):
+    geral: VisaoProjecao
+    regional: VisaoProjecao | None
+    atualizado_em: datetime | None

@@ -63,7 +63,11 @@ onBeforeUnmount(() => exportacao.limpar())
           :class="{ 'visao-geral__tendencia--alta': tendenciaCrescente }"
         >
           <AppIcon :name="tendenciaCrescente ? 'trending-up' : 'trending-down'" :size="28" />
-          {{ kpi ? `${percentual.format(kpi.variacao_percentual)}%` : '—' }}
+          {{
+            kpi?.variacao_percentual != null
+              ? `${percentual.format(kpi.variacao_percentual)}%`
+              : '—'
+          }}
         </span>
       </KpiCard>
     </section>
