@@ -1,0 +1,150 @@
+diff a/docs/arquitetura-contrato-api.md b/docs/arquitetura-contrato-api.md	(rejected hunks)
+@@ -1,52 +1,111 @@
+-# EcoMonitor Brasil - Arquitetura + Contrato de API
++# EcoMonitor Brasil — Arquitetura + Contrato de API
++
++## Arquitetura
+ 
+-## Arquitetura (visão em camadas)
+ ```
+-┌─────────────┐      ┌──────────────────┐      ┌─────────────┐
+-│  Frontend    │─────▶│   API (Backend)   │─────▶│  Camada de   │
+-│  (Vue)       │◀─────│   FastAPI          │◀─────│  Dados       │
+-└─────────────┘      └──────────────────┘      └─────────────┘
+-                                                        │
+-                                      PostgreSQL + jobs de ETL
+-                                      (PRODES / MapBiomas / INMET)
++ arquivos (PRODES, MapBiomas, INMET)
++            │
++            ▼
++   ETL (Python)  ──►  PostgreSQL  ──►  API (FastAPI)  ──►  Frontend (Vue)
++ carga + agregados     6 tabelas        somente leitura      consome só a API
++ + projeção + textos   (DER)            sem autenticação
+ ```
+ 
+-- **Frontend (Vue)**: consome a API, não acessa dados diretamente.
+-- **API (FastAPI)**: expõe os endpoints deste contrato, na mesma base de código do serviço de dados/modelo.
+-- **Camada de dados**: schema já definido no DER (tabelas `localidade`, `desmatamento_anual`, `dado_climatico`, `projecao`, `insight`, `status_sistema`); a ingestão (ETL) roda de forma agendada, não em tempo real.
++- **Frontend (Vue)**: só consome a API; exportações (CSV/PNG) são feitas no navegador.
++- **API (FastAPI)**: lê do banco e devolve JSON. Calcula na hora apenas os indicadores que dependem do período pedido (variação, correlação, anomalia, déficit). Não roda modelo nem chama LLM.
++- **ETL (Python)**: roda em lote (`docker compose run --rm etl`), nunca por requisição (RF15). Se uma etapa falhar, `status_sistema` registra FALHA e a API continua servindo os últimos dados válidos.
++- **Banco**: PostgreSQL, sem PostGIS. Esquema em `database/schema.sql`.
++
++## Etapas do ETL (nesta ordem)
++
++| Etapa | O que faz | Entrada |
++|---|---|---|
++| localidades | cria Brasil (`PAIS`), 27 estados e 6 biomas | — |
++| prodes | desmatamento anual por estado e por bioma (km²) | `data/raw/prodes/prodes_estados.csv`, `prodes_biomas.csv` |
++| mapbiomas | idem, em hectares (convertidos para km²) | `data/raw/mapbiomas/mapbiomas_estados.csv`, `mapbiomas_biomas.csv` |
++| inmet | temperatura média e precipitação total anuais por estado e por bioma | `data/raw/inmet/*.CSV` + `estacoes_bioma.csv` |
++| agregados | **Brasil**: desmatamento = soma dos biomas; clima = média dos estados (anos com ≥ 20 estados) | banco |
++| projecao | regressão linear (scikit-learn) sobre os últimos 15 anos, 7 anos à frente, intervalo de previsão de 95% | banco |
++| insights | textos de insight (RF18) por localidade e tela | banco |
+ 
+-Stack definida: Python + FastAPI, PostgreSQL (sem PostGIS não há geometria envolvida, só coordenadas simples e dados tabulares), deploy em nuvem (Render/Railway).
++Regras que valem para toda a API:
+ 
+-## Contrato de API
++- **Fonte do desmatamento**: PRODES; o MapBiomas só entra em localidades que não têm PRODES. As duas fontes nunca se misturam na mesma série.
++- **Estado e bioma são recortes diferentes dos mesmos dados e nunca são somados entre si.** Por isso o Brasil é a soma dos *biomas*. Se menos de 6 biomas estiverem carregados, o ETL avisa que o total nacional está incompleto.
++- **Modelo**: é estimativa de tendência, não previsão determinística. O ETL grava MAE, RMSE e R² da validação (últimos 3 anos, um passo à frente) em `data/processed/metricas_modelo.json`.
++- **Textos**: saem de templates. Se `GEMINI_API_KEY` e `GEMINI_MODEL` estiverem definidos, o Gemini reescreve o template, mas a versão do modelo só é aceita se não tiver nenhum número que não esteja no template (o LLM não calcula nem inventa dado). Falhou ou foi rejeitado: fica o template.
++- Os números que originaram cada texto ficam em `insight.metricas_origem` (inclusive o ponto de estabilização da projeção).
+ 
+-| Endpoint | Método | Query params | Retorna |
+-|---|---|---|---|
+-| `/api/v1/localidades` | GET | - | Lista de estados/biomas para o filtro |
+-| `/api/v1/overview` | GET | `localidade` (opcional; ausente = Brasil), `ano_inicio`, `ano_fim` | KPIs + série histórica + insight + data de atualização |
+-| `/api/v1/climate-correlation` | GET | `localidade`, `start`, `end` | série cruzando desmatamento x clima + insight |
+-| `/api/v1/projection` | GET | `localidade`, `horizon` | série histórica + projeção regional **e** nacional + insight |
++## Contrato de API (v1, somente leitura, sem autenticação)
+ 
+-*(Exportação de CSV/PNG saiu do contrato fica client-side no Vue: CSV a partir dos dados já carregados, PNG via exportação do próprio canvas do gráfico, sem precisar de endpoint no backend.)*
++Prefixo `/api/v1`. Sem `localidade` = Brasil. A documentação interativa fica em `/docs`.
+ 
+-### Exemplo de resposta `/api/v1/overview`
++| Endpoint | Parâmetros | Retorna |
++|---|---|---|
++| `GET /health` | — | `{"status": "ok"}` (testa o banco) |
++| `GET /localidades` | — | lista de `{id, nome, sigla_uf, tipo, regiao}`; `tipo` = `PAIS` \| `ESTADO` \| `BIOMA` |
++| `GET /overview` | `localidade`, `ano_inicio`, `ano_fim` | `kpis`, `bioma_critico`, `serie_historica`, `insight`, `atualizado_em` |
++| `GET /climate-correlation` | `localidade`, `ano_inicio`, `ano_fim` | `serie`, `indicadores`, `insight`, `atualizado_em` |
++| `GET /projection` | `localidade`, `horizonte` | `geral`, `regional`, `atualizado_em` |
++
++`localidade` é o **id** devolvido por `/localidades`. Erros: `404` com `detail` explicando (localidade inexistente, sem dados, ETL ainda não rodou) e `422` para parâmetros inválidos (ex.: `ano_inicio` maior que `ano_fim`).
++
++### `/overview`
+ 
+ ```json
+ {
+-  "kpis": [
+-    {
+-      "region": "AM",
+-      "area_desmatada_km2": 1234.5,
+-      "variacao_percentual": 3.2,
+-      "ano_referencia": 2024
+-    }
+-  ],
+-  "serie_historica": [
+-    { "ano": 2004, "area_km2": 27772 },
+-    { "ano": 2023, "area_km2": 9001 }
+-  ],
+-  "insight": "A área desmatada em 2023 caiu 22% em relação a 2022.",
+-  "atualizado_em": "2026-08-15T00:00:00Z"
++  "kpis": [{ "region": "PA", "area_desmatada_km2": 3272.4, "variacao_percentual": -21.0, "ano_referencia": 2023 }],
++  "bioma_critico": "Amazônia",
++  "serie_historica": [{ "ano": 2022, "area_km2": 4141.0 }, { "ano": 2023, "area_km2": 3272.4 }],
++  "insight": "Pará: a área desmatada em 2023 foi de 3.272 km², uma queda de 21,0% em relação a 2022 (4.141 km²). …",
++  "atualizado_em": "2026-10-25T21:27:00Z"
+ }
+ ```
+ 
+-*(Os demais endpoints seguem o mesmo padrão: resposta JSON tipada, sem implementação real ainda isso fica para os próximos cards de backend.)*
++- `kpis[0].region`: `BR` para o Brasil, a sigla para estado, o nome para bioma. `variacao_percentual` é `null` se não houver o ano anterior.
++- `bioma_critico`: bioma com a maior área desmatada no ano de referência (calculado sobre os biomas, não depende do filtro).
++- `insight` e `atualizado_em` podem ser `null` antes da primeira execução do ETL.
++
++### `/climate-correlation`
++
++```json
++{
++  "serie": [{ "ano": 2023, "area_km2": 3272.4, "temperatura_media_c": 27.3, "precipitacao_mm": 1900.0 }],
++  "indicadores": {
++    "taxa_supressao_pct": 8.4, "anomalia_termica_c": 0.6, "deficit_hidrico_mm": -276.0,
++    "coef_correlacao_temperatura": -0.07, "coef_correlacao_precipitacao": 0.08
++  },
++  "insight": "Pará: entre 2014 e 2023, a correlação entre o desmatamento e a temperatura média foi de -0,07 …",
++  "atualizado_em": "2026-10-25T21:27:00Z"
++}
++```
++
++- `serie` só tem os anos com desmatamento **e** clima. 404 se não houver nenhum.
++- `indicadores` valem para o período devolvido: taxa de supressão = média das variações anuais (últimos 10 anos); anomalia térmica e déficit hídrico = último ano menos a média do período; coeficientes de Pearson (`null` com menos de 3 anos ou série constante).
++
++### `/projection`
++
++```json
++{
++  "geral": {
++    "serie_historica": [{ "ano": 2023, "area_km2": 9001.0 }],
++    "projecao": [{ "ano": 2024, "valor_projetado_km2": 8450.0, "intervalo_inferior": 7300.0, "intervalo_superior": 9700.0 }],
++    "ponto_estabilizacao": 2028,
++    "insight": "Brasil: se a tendência atual continuar, a área desmatada deve chegar a cerca de …"
++  },
++  "regional": null,
++  "atualizado_em": "2026-10-25T21:27:00Z"
++}
++```
++
++- `geral` é o Brasil; `regional` só vem com `localidade` (e `null` se ela for o próprio Brasil). Cada visão tem o próprio histórico (últimos 6 anos), projeção e texto.
++- `horizonte` limita quantos anos projetados voltam (padrão: todos os calculados, 7).
++- `ponto_estabilizacao`: **critério provisório**: primeiro ano projetado com variação anual menor que 1% (em módulo); `null` se não houver ou se cair fora do horizonte pedido. Precisa ser validado com a equipe de Dados/IA.
++
++## Pontos em aberto
++
++1. Critério do "Ponto de Estabilização" (acima).
++2. O clima por **bioma** depende do arquivo `estacoes_bioma.csv` (estação → bioma). Biomas sem estação mapeada respondem 404 em `/climate-correlation`.
++3. O clima do **Brasil** só existe nos anos com pelo menos 20 estados com dado (`MIN_ESTADOS_BRASIL`); nos anos iniciais do INMET isso encurta a série.
++4. A revisão pedagógica dos textos pela equipe de extensão (RF21) não tem campo no DER; hoje os textos vão direto para a API.
++5. Bancos criados antes desta versão precisam rodar `database/migracoes/001_pais_e_insight_unico.sql`.

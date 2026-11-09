@@ -1,0 +1,28 @@
+diff a/etl/pipeline/config.py b/etl/pipeline/config.py	(rejected hunks)
+@@ -35,4 +35,24 @@ MAPBIOMAS_UNIDADE = "ha"
+ CLIMA_ANO_PRODES = True
+ 
+ # Fração mínima das 8760 horas do ano com dado para a estação-ano valer
+-CLIMA_COBERTURA_MIN = 0.8
+\ No newline at end of file
++CLIMA_COBERTURA_MIN = 0.8
++
++# ---------------------------------------------------------------------------
++# Brasil, projeção e textos de insight
++# ---------------------------------------------------------------------------
++PROCESSED_DIR = DATA_DIR / "processed"
++
++# O "Brasil" do clima é a média dos estados; só vale no ano com pelo menos este
++# número de estados com dado (nos anos iniciais o INMET tem poucas estações).
++MIN_ESTADOS_BRASIL = int(os.getenv("MIN_ESTADOS_BRASIL", "20"))
++
++# Modelo de projeção (regressão linear sobre o tempo)
++ANOS_PROJECAO = int(os.getenv("ANOS_PROJECAO", "7"))   # anos à frente
++JANELA_MODELO = int(os.getenv("JANELA_MODELO", "15"))  # usa só os últimos N anos
++MIN_ANOS_MODELO = int(os.getenv("MIN_ANOS_MODELO", "8"))  # mínimo de anos para projetar
++
++# Reescrita opcional dos textos com Gemini. Sem chave E modelo, usa só o template.
++# O nome do modelo muda com o tempo: confira o atual em https://ai.google.dev/gemini-api/docs/models
++GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or None
++GEMINI_MODEL = os.getenv("GEMINI_MODEL") or None
++USAR_LLM = True  # run_etl.py coloca False com --sem-llm

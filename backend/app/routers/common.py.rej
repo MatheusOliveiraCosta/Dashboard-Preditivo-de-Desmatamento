@@ -1,0 +1,82 @@
+diff a/backend/app/routers/common.py b/backend/app/routers/common.py	(rejected hunks)
+@@ -1,17 +1,70 @@
++"""Consultas e validações compartilhadas pelos endpoints."""
++from datetime import datetime, timezone
++
+ from fastapi import HTTPException
+ 
+-from app import mock_data
++from app.db import query
+ 
++FONTE_PREFERIDA = "PRODES"
+ 
+-def resolver_localidade(codigo: str | None) -> str | None:
+-    """Ausente = Brasil (None). Código desconhecido = 404."""
+-    if codigo is None:
+-        return None
+-    if mock_data.obter_localidade(codigo) is None:
+-        raise HTTPException(404, f"Localidade '{codigo}' não encontrada. Veja /api/v1/localidades.")
+-    return codigo
++
++def resolver_localidade(localidade_id: int | None) -> dict:
++    """Sem id = Brasil. Id desconhecido = 404."""
++    if localidade_id is None:
++        linhas = query("SELECT id, nome, sigla_uf, tipo, regiao FROM localidade WHERE tipo = 'PAIS'")
++        if not linhas:
++            raise HTTPException(
++                404, "Não há dados carregados. Rode o ETL (docker compose run --rm etl)."
++            )
++        return linhas[0]
++    linhas = query("SELECT id, nome, sigla_uf, tipo, regiao FROM localidade WHERE id = %s", (localidade_id,))
++    if not linhas:
++        raise HTTPException(404, f"Localidade {localidade_id} não encontrada. Veja /api/v1/localidades.")
++    return linhas[0]
+ 
+ 
+-def validar_periodo(inicio: int, fim: int) -> None:
+-    if inicio > fim:
++def validar_periodo(inicio: int | None, fim: int | None) -> None:
++    if inicio is not None and fim is not None and inicio > fim:
+         raise HTTPException(422, "O ano inicial não pode ser maior que o ano final.")
++
++
++def serie_desmatamento(localidade_id: int, ano_inicio: int | None = None,
++                       ano_fim: int | None = None) -> tuple[str | None, list[tuple[int, float]]]:
++    """(fonte, [(ano, km²)]). Usa o PRODES; se a localidade não tiver PRODES, o MapBiomas.
++    Nunca mistura as duas fontes na mesma série."""
++    linhas = query(
++        "SELECT fonte, ano, area_km2 FROM desmatamento_anual WHERE localidade_id = %s ORDER BY ano",
++        (localidade_id,),
++    )
++    fontes = {l["fonte"] for l in linhas}
++    if not fontes:
++        return None, []
++    fonte = FONTE_PREFERIDA if FONTE_PREFERIDA in fontes else sorted(fontes)[0]
++    serie = [
++        (l["ano"], float(l["area_km2"]))
++        for l in linhas
++        if l["fonte"] == fonte
++        and (ano_inicio is None or l["ano"] >= ano_inicio)
++        and (ano_fim is None or l["ano"] <= ano_fim)
++    ]
++    return fonte, serie
++
++
++def insight(localidade_id: int, tela: str) -> dict | None:
++    """{'texto': ..., 'metricas': {...}} gerado pelo ETL, ou None."""
++    linhas = query(
++        "SELECT texto_gerado, metricas_origem FROM insight WHERE localidade_id = %s AND tela = %s",
++        (localidade_id, tela),
++    )
++    if not linhas:
++        return None
++    return {"texto": linhas[0]["texto_gerado"], "metricas": linhas[0]["metricas_origem"] or {}}
++
++
++def atualizado_em() -> datetime | None:
++    """Data da última atualização bem-sucedida dos dados (status_sistema, gravada em UTC)."""
++    linhas = query("SELECT ultima_atualizacao_sucesso FROM status_sistema WHERE id = 1")
++    momento = linhas[0]["ultima_atualizacao_sucesso"] if linhas else None
++    if momento is None:
++        return None
++    return momento if momento.tzinfo else momento.replace(tzinfo=timezone.utc)

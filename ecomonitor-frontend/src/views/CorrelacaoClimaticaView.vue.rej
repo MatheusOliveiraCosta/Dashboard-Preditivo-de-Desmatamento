@@ -1,0 +1,14 @@
+diff a/ecomonitor-frontend/src/views/CorrelacaoClimaticaView.vue b/ecomonitor-frontend/src/views/CorrelacaoClimaticaView.vue	(rejected hunks)
+@@ -96,7 +96,11 @@ onBeforeUnmount(() => exportacao.limpar())
+           <IndicadorCard
+             titulo="Supressão"
+             icone="tree"
+-            :valor="indicadores ? `${pct.format(indicadores.taxa_supressao_pct)}%` : '—'"
++            :valor="
++              indicadores?.taxa_supressao_pct != null
++                ? `${pct.format(indicadores.taxa_supressao_pct)}%`
++                : '—'
++            "
+             descricao="Variação média anual do desmatamento no período."
+             :cor-valor="supressaoEmAlta ? '#93000a' : '#1e3b1a'"
+             :cor-brilho="supressaoEmAlta ? 'rgba(147, 0, 10, 0.2)' : 'rgba(30, 59, 26, 0.1)'"

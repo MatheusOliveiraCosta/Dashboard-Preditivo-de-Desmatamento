@@ -1,0 +1,23 @@
+diff a/database/schema.sql b/database/schema.sql	(rejected hunks)
+@@ -3,9 +3,9 @@ BEGIN;
+ CREATE TABLE localidade (
+     id        INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+     nome      VARCHAR(100) NOT NULL,
+-    sigla_uf  VARCHAR(2),                       -- nulo para biomas
++    sigla_uf  VARCHAR(2),                       -- nulo para biomas e para o Brasil
+     tipo      VARCHAR(20)  NOT NULL
+-              CHECK (tipo IN ('ESTADO', 'BIOMA')),
++              CHECK (tipo IN ('PAIS', 'ESTADO', 'BIOMA')),  -- PAIS = o registro "Brasil"
+     regiao    VARCHAR(45),
+     UNIQUE (nome, tipo)
+ );
+@@ -49,7 +49,8 @@ CREATE TABLE insight (
+     tela             VARCHAR(20) NOT NULL
+                      CHECK (tela IN ('VISAO_GERAL', 'CORRELACAO_CLIMATICA', 'PROJECAO_TENDENCIA')),
+     texto_gerado     TEXT NOT NULL,
+-    metricas_origem  JSON            -- números que originaram o texto
++    metricas_origem  JSON,           -- números que originaram o texto
++    UNIQUE (localidade_id, tela)
+ );
+ 
+ -- Linha única (id = 1)
