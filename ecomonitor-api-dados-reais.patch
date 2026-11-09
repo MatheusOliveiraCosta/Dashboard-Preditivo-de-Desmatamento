@@ -1,0 +1,2440 @@
+diff --git a/.env.example b/.env.example
+index 0314e5c..743274c 100644
+--- a/.env.example
++++ b/.env.example
+@@ -1,3 +1,8 @@
+ POSTGRES_USER=eco
+ POSTGRES_PASSWORD=troque_esta_senha
+ POSTGRES_DB=ecomonitor
++
++# Opcional: textos de insight reescritos pelo Gemini (RF18). Deixe em branco para usar só templates.
++# O nome do modelo muda com o tempo; confira o atual em https://ai.google.dev/gemini-api/docs/models
++GEMINI_API_KEY=
++GEMINI_MODEL=
+diff --git a/.gitignore b/.gitignore
+index 0426d80..80a27df 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -2,3 +2,7 @@
+ .env
+ __pycache__/
+ *.pyc
++
++__pycache__/
++.pytest_cache/
++*.pyc
+diff --git a/README.md b/README.md
+index b821c45..1e8d69a 100644
+--- a/README.md
++++ b/README.md
+@@ -1,2 +1,52 @@
+-# Dashboard-Preditivo-de-Desmatamento
+-Desenvolvimento de um Dashboard Preditivo de Dados Ambientais, concebido primariamente como uma ferramenta interativa de divulgação científica. O sistema solucionará o distanciamento entre o dado bruto e o cidadão, centralizando e cruzando dados tabulares históricos em uma plataforma web didática.
++# EcoMonitor Brasil — Dashboard Preditivo de Desmatamento
++
++Projeto da disciplina Oficina de Integração (UTFPR), em parceria com o projeto de extensão
++"Despertar para a Ciência". Dados públicos: PRODES/INPE, MapBiomas e INMET.
++
++```
++ecomonitor-frontend/   Vue 3 + TypeScript (as 4 telas)
++backend/               API FastAPI (somente leitura)
++etl/                   carga dos dados, Brasil, projeção e textos de insight
++database/              schema.sql (PostgreSQL) e migrações
++docs/                  arquitetura e contrato da API
++tests/                 testes de ponta a ponta (ETL → banco → API)
++```
++
++Contrato da API, regras dos dados e etapas do ETL: [`docs/arquitetura-contrato-api.md`](docs/arquitetura-contrato-api.md).
++
++## Rodando com dados reais
++
++1. `cp .env.example .env` (e ajuste as senhas, se quiser).
++2. Coloque os arquivos de entrada em `data/raw/` (a pasta não vai para o Git):
++   - `prodes/prodes_estados.csv` e `prodes/prodes_biomas.csv`
++   - `mapbiomas/mapbiomas_estados.csv` e `mapbiomas/mapbiomas_biomas.csv` (opcional)
++   - `inmet/` com os CSV das estações do BDMEP + `inmet/estacoes_bioma.csv`
++
++   Para o Brasil ficar completo, carregue os **6 biomas** do PRODES.
++3. Suba o banco e a API: `docker compose up -d db backend`
++4. Rode o ETL: `docker compose run --rm etl`
++   (só Brasil, projeção e textos: `docker compose run --rm etl python run.py --fontes agregados,projecao,insights`)
++5. Confira: <http://localhost:8000/docs>
++6. Frontend: em `ecomonitor-frontend`, `cp .env.example .env`, troque `VITE_USE_MOCK=true` por `false` e rode `npm install && npm run dev`.
++
++Banco já existente de uma versão anterior? Aplique a migração (não precisa apagar dados):
++`docker compose exec -T db psql -U postgres -d ecomonitor < database/migracoes/001_pais_e_insight_unico.sql`
++
++### Textos com o Gemini (opcional)
++
++Sem configuração, os textos de insight saem de templates. Para o Gemini reescrevê-los, defina
++`GEMINI_API_KEY` e `GEMINI_MODEL` no `.env` (o nome do modelo muda com o tempo; confira em
++<https://ai.google.dev/gemini-api/docs/models>). O texto do modelo só é usado se não trouxer nenhum
++número diferente do cálculo; senão, vale o template. Para desligar: `... python run.py --sem-llm`.
++
++## Testes
++
++Precisam de um PostgreSQL (o banco informado é **apagado e recriado**):
++
++```
++pip install -r etl/requirements.txt -r backend/requirements-dev.txt
++TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ecomonitor_test pytest
++```
++
++Os testes geram arquivos de entrada no formato real, rodam o ETL de verdade e consultam a API; um deles
++compara a resposta da API com os mocks do frontend para garantir que o contrato não se separa.
+diff --git a/backend/app/main.py b/backend/app/main.py
+index cfc4438..0c3935e 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -1,4 +1,4 @@
+-from fastapi import APIRouter, FastAPI, Request
++from fastapi import APIRouter, FastAPI
+ from fastapi.middleware.cors import CORSMiddleware
+ 
+ from app.db import query
+@@ -6,8 +6,8 @@ from app.routers import climate, localidades, overview, projection
+ 
+ app = FastAPI(
+     title="EcoMonitor API",
+-    description="Contrato em docs/arquitetura-contrato-api.md. "
+-                "ATENÇÃO: os dados ainda são MOCK (fictícios).",
++    description="API somente de leitura (sem autenticação). Dados: PRODES/INPE, MapBiomas e INMET, "
++                "carregados pelo ETL. Contrato em docs/arquitetura-contrato-api.md.",
+ )
+ 
+ app.add_middleware(
+@@ -18,13 +18,6 @@ app.add_middleware(
+ )
+ 
+ 
+-@app.middleware("http")
+-async def marcar_dados_mock(request: Request, call_next):
+-    response = await call_next(request)
+-    response.headers["X-Data-Source"] = "mock"
+-    return response
+-
+-
+ api = APIRouter(prefix="/api/v1")
+ 
+ 
+diff --git a/backend/app/mock_data.py b/backend/app/mock_data.py
+deleted file mode 100644
+index df80474..0000000
+--- a/backend/app/mock_data.py
++++ /dev/null
+@@ -1,185 +0,0 @@
+-"""DADOS MOCK (fictícios, determinísticos) para a fase de fundação técnica.
+-
+-nada aqui vem de prodes/mapbiomas/inmet quando o ETL estiver pronto
+-cada função pública deste módulo deve ser substituída por uma consulta do postgre
+-mantendo as mesmas assinaturas
+-"""
+-import zlib
+-from datetime import datetime, timezone
+-from random import Random
+-from statistics import StatisticsError, correlation, linear_regression, pstdev
+-
+-ANO_MIN, ANO_MAX = 2004, 2024
+-ATUALIZADO_EM = datetime(2026, 8, 15, tzinfo=timezone.utc)
+-
+-# codigo, nome, tipo, sigla_uf, regiao, área mock em 2004 (km²)
+-_LOCALIDADES = [
+-    ("amazonia", "Amazônia", "bioma", None, None, 27772),
+-    ("cerrado", "Cerrado", "bioma", None, None, 15000),
+-    ("mata-atlantica", "Mata Atlântica", "bioma", None, None, 800),
+-    ("caatinga", "Caatinga", "bioma", None, None, 3000),
+-    ("pampa", "Pampa", "bioma", None, None, 400),
+-    ("pantanal", "Pantanal", "bioma", None, None, 700),
+-    ("PA", "Pará", "estado", "PA", "Norte", 8500),
+-    ("MT", "Mato Grosso", "estado", "MT", "Centro-Oeste", 11800),
+-    ("AM", "Amazonas", "estado", "AM", "Norte", 1200),
+-    ("RO", "Rondônia", "estado", "RO", "Norte", 3000),
+-    ("MA", "Maranhão", "estado", "MA", "Nordeste", 1800),
+-    ("TO", "Tocantins", "estado", "TO", "Norte", 1200),
+-    ("BA", "Bahia", "estado", "BA", "Nordeste", 2000),
+-    ("GO", "Goiás", "estado", "GO", "Centro-Oeste", 2500),
+-]
+-_POR_CODIGO = {
+-    c[0]: {"codigo": c[0], "nome": c[1], "tipo": c[2], "sigla_uf": c[3], "regiao": c[4]}
+-    for c in _LOCALIDADES
+-}
+-_BASE = {c[0]: c[5] for c in _LOCALIDADES}
+-_BIOMAS = [c[0] for c in _LOCALIDADES if c[2] == "bioma"]
+-
+-# Forma geral da curva (relativa a 2004): queda até 2012, alta até 2021, queda depois.
+-_FORMA = [(2004, 1.0), (2012, 0.25), (2021, 0.60), (2024, 0.40)]
+-
+-
+-def _forma(ano: int) -> float:
+-    for (a0, v0), (a1, v1) in zip(_FORMA, _FORMA[1:]):
+-        if a0 <= ano <= a1:
+-            return v0 + (v1 - v0) * (ano - a0) / (a1 - a0)
+-    return _FORMA[-1][1]
+-
+-
+-def _rng(chave: str) -> Random:
+-    # crc32 (e não hash()) para o resultado ser igual a cada execução
+-    return Random(zlib.crc32(chave.encode()))
+-
+-
+-def _serie_propria(codigo: str) -> dict[int, float]:
+-    rng = _rng(codigo)
+-    return {
+-        ano: round(_BASE[codigo] * _forma(ano) * rng.uniform(0.94, 1.06), 1)
+-        for ano in range(ANO_MIN, ANO_MAX + 1)
+-    }
+-
+-
+-def _serie_completa(codigo: str | None) -> dict[int, float]:
+-    """codigo=None significa Brasil = soma dos biomas."""
+-    if codigo is not None:
+-        return _serie_propria(codigo)
+-    series = [_serie_propria(b) for b in _BIOMAS]
+-    return {ano: round(sum(s[ano] for s in series), 1) for ano in range(ANO_MIN, ANO_MAX + 1)}
+-
+-
+-# ---------------- API pública do módulo ----------------
+-def listar_localidades() -> list[dict]:
+-    return list(_POR_CODIGO.values())
+-
+-
+-def obter_localidade(codigo: str) -> dict | None:
+-    return _POR_CODIGO.get(codigo)
+-
+-
+-def nome_regiao(codigo: str | None) -> str:
+-    return "Brasil" if codigo is None else _POR_CODIGO[codigo]["nome"]
+-
+-
+-def serie_desmatamento(codigo: str | None, inicio: int, fim: int) -> list[dict]:
+-    s = _serie_completa(codigo)
+-    return [{"ano": a, "area_km2": s[a]} for a in range(inicio, fim + 1)]
+-
+-
+-def kpi(codigo: str | None) -> dict:
+-    s = _serie_completa(codigo)
+-    atual, anterior = s[ANO_MAX], s[ANO_MAX - 1]
+-    return {
+-        "region": codigo or "BR",
+-        "area_desmatada_km2": atual,
+-        "variacao_percentual": round((atual - anterior) / anterior * 100, 1),
+-        "ano_referencia": ANO_MAX,
+-    }
+-
+-
+-def kpis(codigo: str | None) -> list[dict]:
+-    if codigo is not None:
+-        return [kpi(codigo)]
+-    return [kpi(None)] + [kpi(b) for b in _BIOMAS]
+-
+-
+-def serie_clima(codigo: str | None, inicio: int, fim: int) -> list[dict]:
+-    rng = _rng("clima-" + (codigo or "BR"))
+-    temp0 = 24.0 + rng.uniform(-2, 3)
+-    prec0 = 1500 + rng.uniform(-400, 600)
+-    desm = _serie_completa(codigo)
+-    out = []
+-    for ano in range(ANO_MIN, ANO_MAX + 1):
+-        temp = round(temp0 + 0.04 * (ano - ANO_MIN) + rng.uniform(-0.3, 0.3), 2)
+-        prec = round(prec0 - 6 * (ano - ANO_MIN) + rng.uniform(-80, 80), 1)
+-        if inicio <= ano <= fim:
+-            out.append({"ano": ano, "area_km2": desm[ano],
+-                        "temperatura_media_c": temp, "precipitacao_mm": prec})
+-    return out
+-
+-
+-def pearson(xs: list[float], ys: list[float]) -> float | None:
+-    if len(xs) < 3:
+-        return None
+-    try:
+-        return round(correlation(xs, ys), 2)
+-    except StatisticsError:
+-        return None
+-
+-
+-def projetar(codigo: str | None, horizonte: int) -> list[dict]:
+-    """Regressão linear nos últimos 10 anos + faixa de incerteza que cresce com o horizonte."""
+-    s = _serie_completa(codigo)
+-    anos = list(range(ANO_MAX - 9, ANO_MAX + 1))
+-    ys = [s[a] for a in anos]
+-    slope, intercept = linear_regression(anos, ys)
+-    sd = pstdev([y - (intercept + slope * a) for a, y in zip(anos, ys)])
+-    out = []
+-    for h in range(1, horizonte + 1):
+-        ano = ANO_MAX + h
+-        valor = max(0.0, intercept + slope * ano)
+-        margem = 1.96 * sd * (1 + 0.25 * h)
+-        out.append({
+-            "ano": ano,
+-            "valor_km2": round(valor, 1),
+-            "intervalo_inferior": round(max(0.0, valor - margem), 1),
+-            "intervalo_superior": round(valor + margem, 1),
+-        })
+-    return out
+-
+-
+-# ---------------- Insights (texto mock) ----------------
+-# Na versão final virá da tabela `insight` (gerados pelo Gemini no ETL).
+-def insight_overview(codigo: str | None, serie: list[dict]) -> str:
+-    regiao = nome_regiao(codigo)
+-    ultimo = serie[-1]
+-    if len(serie) < 2:
+-        return f"Em {ultimo['ano']}, a área desmatada em {regiao} foi de {ultimo['area_km2']:.0f} km²."
+-    anterior = serie[-2]["area_km2"]
+-    var = (ultimo["area_km2"] - anterior) / anterior * 100
+-    verbo = "caiu" if var < 0 else "subiu"
+-    return (f"A área desmatada em {regiao} em {ultimo['ano']} {verbo} {abs(var):.0f}% "
+-            f"em relação a {serie[-2]['ano']}.")
+-
+-
+-def _forca(r: float | None) -> str:
+-    if r is None:
+-        return "indefinida"
+-    a = abs(r)
+-    return "fraca" if a < 0.3 else "moderada" if a < 0.7 else "forte"
+-
+-
+-def insight_clima(codigo: str | None, inicio: int, fim: int, corr_temp: float | None) -> str:
+-    if corr_temp is None:
+-        return "Período curto demais para calcular a correlação."
+-    return (f"Em {nome_regiao(codigo)}, de {inicio} a {fim}, a correlação entre desmatamento e "
+-            f"temperatura é {_forca(corr_temp)} ({corr_temp:.2f}). Correlação não prova que "
+-            f"um fenômeno causa o outro.")
+-
+-
+-def insight_projecao(codigo: str | None, proj: list[dict]) -> str:
+-    ult = proj[-1]
+-    return (f"Se a tendência recente se mantiver, a área desmatada em {nome_regiao(codigo)} "
+-            f"deve ficar perto de {ult['valor_km2']:.0f} km² em {ult['ano']} "
+-            f"(faixa de {ult['intervalo_inferior']:.0f} a {ult['intervalo_superior']:.0f} km²). "
+-            f"É uma projeção estatística simples, não uma previsão exata.")
+diff --git a/backend/app/routers/climate.py b/backend/app/routers/climate.py
+index b2dc37c..e0c8ad9 100644
+--- a/backend/app/routers/climate.py
++++ b/backend/app/routers/climate.py
+@@ -1,28 +1,55 @@
+-from fastapi import APIRouter, Query
++from fastapi import APIRouter, HTTPException, Query
+ 
+-from app import mock_data
+-from app.mock_data import ANO_MAX, ANO_MIN
+-from app.routers.common import resolver_localidade, validar_periodo
+-from app.schemas import ClimateResponse
++from app.db import query
++from app.routers import common
++from app.schemas import ClimateCorrelationOut, ClimaPonto, IndicadoresClimaticos
++from app.services.indicadores import correlacao, desvio_da_media, taxa_supressao_pct
+ 
+ router = APIRouter()
+ 
+ 
+-@router.get("/climate-correlation", response_model=ClimateResponse)
++@router.get("/climate-correlation", response_model=ClimateCorrelationOut, tags=["clima"])
+ def climate_correlation(
+-    localidade: str | None = Query(None, description="UF ou slug do bioma. Ausente = Brasil."),
+-    start: int = Query(ANO_MIN, ge=ANO_MIN, le=ANO_MAX),
+-    end: int = Query(ANO_MAX, ge=ANO_MIN, le=ANO_MAX),
++    localidade: int | None = Query(None, description="id da localidade; ausente = Brasil"),
++    ano_inicio: int | None = Query(None, ge=1900, le=2100),
++    ano_fim: int | None = Query(None, ge=1900, le=2100),
+ ):
+-    codigo = resolver_localidade(localidade)
+-    validar_periodo(start, end)
+-    serie = mock_data.serie_clima(codigo, start, end)
+-    areas = [p["area_km2"] for p in serie]
+-    r_temp = mock_data.pearson(areas, [p["temperatura_media_c"] for p in serie])
+-    r_prec = mock_data.pearson(areas, [p["precipitacao_mm"] for p in serie])
+-    return {
+-        "serie": serie,
+-        "correlacao": {"temperatura": r_temp, "precipitacao": r_prec},
+-        "insight": mock_data.insight_clima(codigo, start, end, r_temp),
+-        "atualizado_em": mock_data.ATUALIZADO_EM,
++    common.validar_periodo(ano_inicio, ano_fim)
++    loc = common.resolver_localidade(localidade)
++    _, desmat = common.serie_desmatamento(loc["id"], ano_inicio, ano_fim)
++    clima = {
++        l["ano"]: (float(l["temperatura_media_c"]), float(l["precipitacao_mm"]))
++        for l in query(
++            """SELECT ano, temperatura_media_c, precipitacao_mm FROM dado_climatico
++               WHERE localidade_id = %s AND temperatura_media_c IS NOT NULL
++                 AND precipitacao_mm IS NOT NULL""",
++            (loc["id"],),
++        )
+     }
++    # só os anos que têm desmatamento E clima, para as séries serem comparáveis
++    pontos = [
++        ClimaPonto(ano=ano, area_km2=area, temperatura_media_c=clima[ano][0], precipitacao_mm=clima[ano][1])
++        for ano, area in desmat if ano in clima
++    ]
++    if not pontos:
++        raise HTTPException(
++            404, f"Não há anos com dados de desmatamento e de clima para {loc['nome']} no período pedido."
++        )
++
++    areas = [p.area_km2 for p in pontos]
++    temps = [p.temperatura_media_c for p in pontos]
++    chuvas = [p.precipitacao_mm for p in pontos]
++    texto = common.insight(loc["id"], "CORRELACAO_CLIMATICA")
++
++    return ClimateCorrelationOut(
++        serie=pontos,
++        indicadores=IndicadoresClimaticos(
++            taxa_supressao_pct=taxa_supressao_pct(areas),
++            anomalia_termica_c=desvio_da_media(temps),
++            deficit_hidrico_mm=desvio_da_media(chuvas),
++            coef_correlacao_temperatura=correlacao(areas, temps),
++            coef_correlacao_precipitacao=correlacao(areas, chuvas),
++        ),
++        insight=texto["texto"] if texto else None,
++        atualizado_em=common.atualizado_em(),
++    )
+diff --git a/backend/app/routers/common.py b/backend/app/routers/common.py
+index b181fa5..8a01386 100644
+--- a/backend/app/routers/common.py
++++ b/backend/app/routers/common.py
+@@ -1,17 +1,70 @@
++"""Consultas e validações compartilhadas pelos endpoints."""
++from datetime import datetime, timezone
++
+ from fastapi import HTTPException
+ 
+-from app import mock_data
++from app.db import query
+ 
++FONTE_PREFERIDA = "PRODES"
+ 
+-def resolver_localidade(codigo: str | None) -> str | None:
+-    """Ausente = Brasil (None). Código desconhecido = 404."""
+-    if codigo is None:
+-        return None
+-    if mock_data.obter_localidade(codigo) is None:
+-        raise HTTPException(404, f"Localidade '{codigo}' não encontrada. Veja /api/v1/localidades.")
+-    return codigo
++
++def resolver_localidade(localidade_id: int | None) -> dict:
++    """Sem id = Brasil. Id desconhecido = 404."""
++    if localidade_id is None:
++        linhas = query("SELECT id, nome, sigla_uf, tipo, regiao FROM localidade WHERE tipo = 'PAIS'")
++        if not linhas:
++            raise HTTPException(
++                404, "Não há dados carregados. Rode o ETL (docker compose run --rm etl)."
++            )
++        return linhas[0]
++    linhas = query("SELECT id, nome, sigla_uf, tipo, regiao FROM localidade WHERE id = %s", (localidade_id,))
++    if not linhas:
++        raise HTTPException(404, f"Localidade {localidade_id} não encontrada. Veja /api/v1/localidades.")
++    return linhas[0]
+ 
+ 
+-def validar_periodo(inicio: int, fim: int) -> None:
+-    if inicio > fim:
++def validar_periodo(inicio: int | None, fim: int | None) -> None:
++    if inicio is not None and fim is not None and inicio > fim:
+         raise HTTPException(422, "O ano inicial não pode ser maior que o ano final.")
++
++
++def serie_desmatamento(localidade_id: int, ano_inicio: int | None = None,
++                       ano_fim: int | None = None) -> tuple[str | None, list[tuple[int, float]]]:
++    """(fonte, [(ano, km²)]). Usa o PRODES; se a localidade não tiver PRODES, o MapBiomas.
++    Nunca mistura as duas fontes na mesma série."""
++    linhas = query(
++        "SELECT fonte, ano, area_km2 FROM desmatamento_anual WHERE localidade_id = %s ORDER BY ano",
++        (localidade_id,),
++    )
++    fontes = {l["fonte"] for l in linhas}
++    if not fontes:
++        return None, []
++    fonte = FONTE_PREFERIDA if FONTE_PREFERIDA in fontes else sorted(fontes)[0]
++    serie = [
++        (l["ano"], float(l["area_km2"]))
++        for l in linhas
++        if l["fonte"] == fonte
++        and (ano_inicio is None or l["ano"] >= ano_inicio)
++        and (ano_fim is None or l["ano"] <= ano_fim)
++    ]
++    return fonte, serie
++
++
++def insight(localidade_id: int, tela: str) -> dict | None:
++    """{'texto': ..., 'metricas': {...}} gerado pelo ETL, ou None."""
++    linhas = query(
++        "SELECT texto_gerado, metricas_origem FROM insight WHERE localidade_id = %s AND tela = %s",
++        (localidade_id, tela),
++    )
++    if not linhas:
++        return None
++    return {"texto": linhas[0]["texto_gerado"], "metricas": linhas[0]["metricas_origem"] or {}}
++
++
++def atualizado_em() -> datetime | None:
++    """Data da última atualização bem-sucedida dos dados (status_sistema, gravada em UTC)."""
++    linhas = query("SELECT ultima_atualizacao_sucesso FROM status_sistema WHERE id = 1")
++    momento = linhas[0]["ultima_atualizacao_sucesso"] if linhas else None
++    if momento is None:
++        return None
++    return momento if momento.tzinfo else momento.replace(tzinfo=timezone.utc)
+diff --git a/backend/app/routers/localidades.py b/backend/app/routers/localidades.py
+index 5494df6..f7b6709 100644
+--- a/backend/app/routers/localidades.py
++++ b/backend/app/routers/localidades.py
+@@ -1,12 +1,15 @@
+ from fastapi import APIRouter
+ 
+-from app import mock_data
+-from app.schemas import Localidade
++from app.db import query
++from app.schemas import LocalidadeOut
+ 
+ router = APIRouter()
+ 
+ 
+-@router.get("/localidades", response_model=list[Localidade])
+-def localidades():
+-    """Lista de estados e biomas para o filtro."""
+-    return mock_data.listar_localidades()
++@router.get("/localidades", response_model=list[LocalidadeOut], tags=["localidades"])
++def listar_localidades():
++    """Brasil, estados e biomas. Popula os filtros do frontend."""
++    return query(
++        """SELECT id, nome, sigla_uf, tipo, regiao FROM localidade
++           ORDER BY CASE tipo WHEN 'PAIS' THEN 0 WHEN 'ESTADO' THEN 1 ELSE 2 END, nome"""
++    )
+diff --git a/backend/app/routers/overview.py b/backend/app/routers/overview.py
+index 79e85d0..b4eb768 100644
+--- a/backend/app/routers/overview.py
++++ b/backend/app/routers/overview.py
+@@ -1,25 +1,46 @@
+-from fastapi import APIRouter, Query
++from fastapi import APIRouter, HTTPException, Query
+ 
+-from app import mock_data
+-from app.mock_data import ANO_MAX, ANO_MIN
+-from app.routers.common import resolver_localidade, validar_periodo
+-from app.schemas import OverviewResponse
++from app.db import query
++from app.routers import common
++from app.schemas import Kpi, OverviewOut, SeriePonto
++from app.services.indicadores import variacao_percentual
+ 
+ router = APIRouter()
+ 
+ 
+-@router.get("/overview", response_model=OverviewResponse)
++def _bioma_critico(ano: int, fonte: str) -> str | None:
++    """Bioma com a maior área desmatada no ano de referência."""
++    linhas = query(
++        """SELECT l.nome FROM desmatamento_anual d JOIN localidade l ON l.id = d.localidade_id
++           WHERE l.tipo = 'BIOMA' AND d.ano = %s AND d.fonte = %s
++           ORDER BY d.area_km2 DESC LIMIT 1""",
++        (ano, fonte),
++    )
++    return linhas[0]["nome"] if linhas else None
++
++
++@router.get("/overview", response_model=OverviewOut, tags=["overview"])
+ def overview(
+-    localidade: str | None = Query(None, description="UF ou slug do bioma. Ausente = Brasil."),
+-    ano_inicio: int = Query(ANO_MIN, ge=ANO_MIN, le=ANO_MAX),
+-    ano_fim: int = Query(ANO_MAX, ge=ANO_MIN, le=ANO_MAX),
++    localidade: int | None = Query(None, description="id da localidade; ausente = Brasil"),
++    ano_inicio: int | None = Query(None, ge=1900, le=2100),
++    ano_fim: int | None = Query(None, ge=1900, le=2100),
+ ):
+-    codigo = resolver_localidade(localidade)
+-    validar_periodo(ano_inicio, ano_fim)
+-    serie = mock_data.serie_desmatamento(codigo, ano_inicio, ano_fim)
+-    return {
+-        "kpis": mock_data.kpis(codigo),
+-        "serie_historica": serie,
+-        "insight": mock_data.insight_overview(codigo, serie),
+-        "atualizado_em": mock_data.ATUALIZADO_EM,
+-    }
++    common.validar_periodo(ano_inicio, ano_fim)
++    loc = common.resolver_localidade(localidade)
++    fonte, serie = common.serie_desmatamento(loc["id"], ano_inicio, ano_fim)
++    if not serie:
++        raise HTTPException(404, f"Não há dados de desmatamento para {loc['nome']} no período pedido.")
++
++    ano_ref, area_ref = serie[-1]
++    anterior = next((area for ano, area in serie if ano == ano_ref - 1), None)
++    regiao = {"PAIS": "BR", "ESTADO": loc["sigla_uf"], "BIOMA": loc["nome"]}[loc["tipo"]]
++    texto = common.insight(loc["id"], "VISAO_GERAL")
++
++    return OverviewOut(
++        kpis=[Kpi(region=regiao or loc["nome"], area_desmatada_km2=area_ref,
++                  variacao_percentual=variacao_percentual(area_ref, anterior), ano_referencia=ano_ref)],
++        bioma_critico=_bioma_critico(ano_ref, fonte),
++        serie_historica=[SeriePonto(ano=a, area_km2=v) for a, v in serie],
++        insight=texto["texto"] if texto else None,
++        atualizado_em=common.atualizado_em(),
++    )
+diff --git a/backend/app/routers/projection.py b/backend/app/routers/projection.py
+index 862265b..3c2718f 100644
+--- a/backend/app/routers/projection.py
++++ b/backend/app/routers/projection.py
+@@ -1,25 +1,55 @@
+-from fastapi import APIRouter, Query
++from fastapi import APIRouter, HTTPException, Query
+ 
+-from app import mock_data
+-from app.mock_data import ANO_MAX, ANO_MIN
+-from app.routers.common import resolver_localidade
+-from app.schemas import ProjectionResponse
++from app.db import query
++from app.routers import common
++from app.schemas import ProjectionOut, ProjecaoPonto, SeriePonto, VisaoProjecao
+ 
+ router = APIRouter()
+ 
++ANOS_DE_HISTORICO = 6  # anos observados que acompanham a projeção no gráfico
+ 
+-@router.get("/projection", response_model=ProjectionResponse)
++
++def _visao(loc: dict, horizonte: int | None) -> VisaoProjecao:
++    _, serie = common.serie_desmatamento(loc["id"])
++    linhas = query(
++        """SELECT ano_projetado, valor_projetado_km2, intervalo_inferior, intervalo_superior
++           FROM projecao WHERE localidade_id = %s
++             AND ano_base = (SELECT MAX(ano_base) FROM projecao WHERE localidade_id = %s)
++           ORDER BY ano_projetado""",
++        (loc["id"], loc["id"]),
++    )
++    if not serie or not linhas:
++        raise HTTPException(
++            404, f"Não há projeção para {loc['nome']}. Rode a etapa 'projecao' do ETL."
++        )
++    if horizonte:
++        linhas = linhas[:horizonte]
++
++    pontos = [ProjecaoPonto(ano=l["ano_projetado"], valor_projetado_km2=float(l["valor_projetado_km2"]),
++                            intervalo_inferior=float(l["intervalo_inferior"]),
++                            intervalo_superior=float(l["intervalo_superior"])) for l in linhas]
++    texto = common.insight(loc["id"], "PROJECAO_TENDENCIA")
++    estabilizacao = (texto["metricas"].get("estabilizacao") if texto else None)
++    if estabilizacao and estabilizacao > pontos[-1].ano:
++        estabilizacao = None  # fora do horizonte pedido
++
++    return VisaoProjecao(
++        serie_historica=[SeriePonto(ano=a, area_km2=v) for a, v in serie[-ANOS_DE_HISTORICO:]],
++        projecao=pontos,
++        ponto_estabilizacao=estabilizacao,
++        insight=texto["texto"] if texto else None,
++    )
++
++
++@router.get("/projection", response_model=ProjectionOut, tags=["projecao"])
+ def projection(
+-    localidade: str | None = Query(None, description="UF ou slug do bioma. Ausente = Brasil."),
+-    horizon: int = Query(5, ge=1, le=10, description="Anos à frente a projetar."),
++    localidade: int | None = Query(None, description="id da localidade; ausente = só a visão geral"),
++    horizonte: int | None = Query(None, ge=1, le=30, description="anos à frente (padrão: todos os calculados)"),
+ ):
+-    codigo = resolver_localidade(localidade)
+-    regional = mock_data.projetar(codigo, horizon)
+-    nacional = mock_data.projetar(None, horizon)  # sem localidade, regional == nacional
+-    return {
+-        "historico": mock_data.serie_desmatamento(codigo, ANO_MIN, ANO_MAX),
+-        "projecao_regional": regional,
+-        "projecao_nacional": nacional,
+-        "insight": mock_data.insight_projecao(codigo, regional),
+-        "atualizado_em": mock_data.ATUALIZADO_EM,
+-    }
++    """`geral` é o Brasil; `regional` só vem quando há uma localidade escolhida."""
++    brasil = common.resolver_localidade(None)
++    geral = _visao(brasil, horizonte)
++    regional = None
++    if localidade is not None and localidade != brasil["id"]:
++        regional = _visao(common.resolver_localidade(localidade), horizonte)
++    return ProjectionOut(geral=geral, regional=regional, atualizado_em=common.atualizado_em())
+diff --git a/backend/app/schemas.py b/backend/app/schemas.py
+index 96ccae8..b5f2bf4 100644
+--- a/backend/app/schemas.py
++++ b/backend/app/schemas.py
+@@ -1,70 +1,76 @@
+-"""modelos de resposta (contrato de api) O fastapi gera o /docs a partir deles"""
++"""Formato das respostas da API (contrato v1). O frontend espelha estes tipos em
++ecomonitor-frontend/src/types/api.ts. Detalhes em docs/arquitetura-contrato-api.md."""
+ from datetime import datetime
+ from typing import Literal
+ 
+ from pydantic import BaseModel
+ 
+ 
+-class Localidade(BaseModel):
+-    codigo: str
++class LocalidadeOut(BaseModel):
++    id: int
+     nome: str
+-    tipo: Literal["estado", "bioma"]
+-    sigla_uf: str | None = None
+-    regiao: str | None = None
++    sigla_uf: str | None
++    tipo: Literal["PAIS", "ESTADO", "BIOMA"]
++    regiao: str | None
+ 
+ 
+-# ---------- /overview ----------
+ class Kpi(BaseModel):
+     region: str
+     area_desmatada_km2: float
+-    variacao_percentual: float | None  # None se não houver ano anterior
++    variacao_percentual: float | None
+     ano_referencia: int
+ 
+ 
+-class PontoSerie(BaseModel):
++class SeriePonto(BaseModel):
+     ano: int
+     area_km2: float
+ 
+ 
+-class OverviewResponse(BaseModel):
++class OverviewOut(BaseModel):
+     kpis: list[Kpi]
+-    serie_historica: list[PontoSerie]
+-    insight: str
+-    atualizado_em: datetime
++    bioma_critico: str | None
++    serie_historica: list[SeriePonto]
++    insight: str | None
++    atualizado_em: datetime | None
+ 
+ 
+-# ---------- /climate-correlation ----------
+-class PontoClima(BaseModel):
++class ClimaPonto(BaseModel):
+     ano: int
+     area_km2: float
+     temperatura_media_c: float
+     precipitacao_mm: float
+ 
+ 
+-class Correlacao(BaseModel):
+-    """Coeficiente de Pearson (-1 a 1). None se o período for curto demais."""
+-    temperatura: float | None
+-    precipitacao: float | None
++class IndicadoresClimaticos(BaseModel):
++    taxa_supressao_pct: float | None
++    anomalia_termica_c: float
++    deficit_hidrico_mm: float
++    coef_correlacao_temperatura: float | None
++    coef_correlacao_precipitacao: float | None
+ 
+ 
+-class ClimateResponse(BaseModel):
+-    serie: list[PontoClima]
+-    correlacao: Correlacao
+-    insight: str
+-    atualizado_em: datetime
++class ClimateCorrelationOut(BaseModel):
++    serie: list[ClimaPonto]
++    indicadores: IndicadoresClimaticos
++    insight: str | None
++    atualizado_em: datetime | None
+ 
+ 
+-# ---------- /projection ----------
+-class PontoProjecao(BaseModel):
++class ProjecaoPonto(BaseModel):
+     ano: int
+-    valor_km2: float
++    valor_projetado_km2: float
+     intervalo_inferior: float
+     intervalo_superior: float
+ 
+ 
+-class ProjectionResponse(BaseModel):
+-    historico: list[PontoSerie]
+-    projecao_regional: list[PontoProjecao]
+-    projecao_nacional: list[PontoProjecao]
+-    insight: str
+-    atualizado_em: datetime
++class VisaoProjecao(BaseModel):
++    serie_historica: list[SeriePonto]
++    projecao: list[ProjecaoPonto]
++    ponto_estabilizacao: int | None
++    insight: str | None
++
++
++class ProjectionOut(BaseModel):
++    geral: VisaoProjecao
++    regional: VisaoProjecao | None
++    atualizado_em: datetime | None
+diff --git a/backend/app/services/__init__.py b/backend/app/services/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/backend/app/services/indicadores.py b/backend/app/services/indicadores.py
+new file mode 100644
+index 0000000..4c7245c
+--- /dev/null
++++ b/backend/app/services/indicadores.py
+@@ -0,0 +1,36 @@
++"""Indicadores calculados na hora (não persistidos), conforme o dicionário de dados.
++
++As mesmas fórmulas existem em etl/pipeline/estatistica.py (usadas nos textos de insight).
++Mantenha as duas em sincronia.
++"""
++import statistics
++from collections.abc import Sequence
++
++
++def variacao_percentual(atual: float, anterior: float | None) -> float | None:
++    """Variação % do ano em relação ao anterior; None se não houver base de comparação."""
++    if anterior is None or anterior == 0:
++        return None
++    return (atual - anterior) / anterior * 100
++
++
++def taxa_supressao_pct(areas: Sequence[float], ultimos_anos: int = 10) -> float | None:
++    """Média das variações anuais (%) nos últimos anos da série."""
++    janela = list(areas)[-(ultimos_anos + 1):]
++    variacoes = [v for a, b in zip(janela, janela[1:])
++                 if (v := variacao_percentual(b, a)) is not None]
++    return statistics.fmean(variacoes) if variacoes else None
++
++
++def correlacao(x: Sequence[float], y: Sequence[float]) -> float | None:
++    """Pearson; None com menos de 3 pontos ou sem variação em uma das séries."""
++    if len(x) != len(y) or len(x) < 3:
++        return None
++    if statistics.pstdev(x) == 0 or statistics.pstdev(y) == 0:
++        return None
++    return statistics.correlation(x, y)
++
++
++def desvio_da_media(valores: Sequence[float]) -> float:
++    """Último valor menos a média da série (anomalia térmica e déficit hídrico)."""
++    return valores[-1] - statistics.fmean(valores)
+diff --git a/backend/requirements-dev.txt b/backend/requirements-dev.txt
+new file mode 100644
+index 0000000..a575cbd
+--- /dev/null
++++ b/backend/requirements-dev.txt
+@@ -0,0 +1,3 @@
++-r requirements.txt
++pytest==8.3.4
++httpx==0.28.1
+diff --git a/database/migracoes/001_pais_e_insight_unico.sql b/database/migracoes/001_pais_e_insight_unico.sql
+new file mode 100644
+index 0000000..a323509
+--- /dev/null
++++ b/database/migracoes/001_pais_e_insight_unico.sql
+@@ -0,0 +1,25 @@
++-- Migração 001 — para bancos criados com a versão anterior do schema.sql.
++-- Bancos novos já nascem com isto; não é preciso rodar.
++--
++-- 1) localidade.tipo passa a aceitar 'PAIS' (registro "Brasil": série, projeção e insight próprios).
++-- 2) insight passa a ter um único texto por (localidade, tela).
++--
++-- Como rodar (com os containers no ar):
++--   docker compose exec -T db psql -U postgres -d ecomonitor < database/migracoes/001_pais_e_insight_unico.sql
++
++BEGIN;
++
++ALTER TABLE localidade DROP CONSTRAINT IF EXISTS localidade_tipo_check;
++ALTER TABLE localidade
++    ADD CONSTRAINT localidade_tipo_check CHECK (tipo IN ('PAIS', 'ESTADO', 'BIOMA'));
++
++-- mantém só o texto mais recente de cada (localidade, tela) antes de criar a restrição
++DELETE FROM insight a
++USING insight b
++WHERE a.localidade_id = b.localidade_id AND a.tela = b.tela AND a.id < b.id;
++
++ALTER TABLE insight DROP CONSTRAINT IF EXISTS insight_localidade_tela_key;
++ALTER TABLE insight
++    ADD CONSTRAINT insight_localidade_tela_key UNIQUE (localidade_id, tela);
++
++COMMIT;
+diff --git a/database/schema.sql b/database/schema.sql
+index 16bd5a8..b3145ac 100644
+--- a/database/schema.sql
++++ b/database/schema.sql
+@@ -3,9 +3,9 @@ BEGIN;
+ CREATE TABLE localidade (
+     id        INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+     nome      VARCHAR(100) NOT NULL,
+-    sigla_uf  VARCHAR(2),                       -- nulo para biomas
++    sigla_uf  VARCHAR(2),                       -- nulo para biomas e para o Brasil
+     tipo      VARCHAR(20)  NOT NULL
+-              CHECK (tipo IN ('ESTADO', 'BIOMA')),
++              CHECK (tipo IN ('PAIS', 'ESTADO', 'BIOMA')),  -- PAIS = o registro "Brasil"
+     regiao    VARCHAR(45),
+     UNIQUE (nome, tipo)
+ );
+@@ -49,7 +49,8 @@ CREATE TABLE insight (
+     tela             VARCHAR(20) NOT NULL
+                      CHECK (tela IN ('VISAO_GERAL', 'CORRELACAO_CLIMATICA', 'PROJECAO_TENDENCIA')),
+     texto_gerado     TEXT NOT NULL,
+-    metricas_origem  JSON            -- números que originaram o texto
++    metricas_origem  JSON,           -- números que originaram o texto
++    UNIQUE (localidade_id, tela)
+ );
+ 
+ -- Linha única (id = 1)
+diff --git a/docker-compose.yml b/docker-compose.yml
+index e37433f..9196d10 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -46,6 +46,9 @@ services:
+     profiles: ["etl"]
+     environment:
+       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
++      # Opcionais: reescrita dos textos de insight com o Gemini (sem eles, usa templates)
++      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
++      GEMINI_MODEL: ${GEMINI_MODEL:-}
+     volumes:
+       - ./etl:/app
+       - ./data:/data
+diff --git a/docs/arquitetura-contrato-api.md b/docs/arquitetura-contrato-api.md
+index bcb5ffe..921b69d 100644
+--- a/docs/arquitetura-contrato-api.md
++++ b/docs/arquitetura-contrato-api.md
+@@ -1,52 +1,111 @@
+-# EcoMonitor Brasil - Arquitetura + Contrato de API
++# EcoMonitor Brasil — Arquitetura + Contrato de API
++
++## Arquitetura
+ 
+-## Arquitetura (visão em camadas)
+ ```
+-┌─────────────┐      ┌──────────────────┐      ┌─────────────┐
+-│  Frontend    │─────▶│   API (Backend)   │─────▶│  Camada de   │
+-│  (Vue)       │◀─────│   FastAPI          │◀─────│  Dados       │
+-└─────────────┘      └──────────────────┘      └─────────────┘
+-                                                        │
+-                                      PostgreSQL + jobs de ETL
+-                                      (PRODES / MapBiomas / INMET)
++ arquivos (PRODES, MapBiomas, INMET)
++            │
++            ▼
++   ETL (Python)  ──►  PostgreSQL  ──►  API (FastAPI)  ──►  Frontend (Vue)
++ carga + agregados     6 tabelas        somente leitura      consome só a API
++ + projeção + textos   (DER)            sem autenticação
+ ```
+ 
+-- **Frontend (Vue)**: consome a API, não acessa dados diretamente.
+-- **API (FastAPI)**: expõe os endpoints deste contrato, na mesma base de código do serviço de dados/modelo.
+-- **Camada de dados**: schema já definido no DER (tabelas `localidade`, `desmatamento_anual`, `dado_climatico`, `projecao`, `insight`, `status_sistema`); a ingestão (ETL) roda de forma agendada, não em tempo real.
++- **Frontend (Vue)**: só consome a API; exportações (CSV/PNG) são feitas no navegador.
++- **API (FastAPI)**: lê do banco e devolve JSON. Calcula na hora apenas os indicadores que dependem do período pedido (variação, correlação, anomalia, déficit). Não roda modelo nem chama LLM.
++- **ETL (Python)**: roda em lote (`docker compose run --rm etl`), nunca por requisição (RF15). Se uma etapa falhar, `status_sistema` registra FALHA e a API continua servindo os últimos dados válidos.
++- **Banco**: PostgreSQL, sem PostGIS. Esquema em `database/schema.sql`.
++
++## Etapas do ETL (nesta ordem)
++
++| Etapa | O que faz | Entrada |
++|---|---|---|
++| localidades | cria Brasil (`PAIS`), 27 estados e 6 biomas | — |
++| prodes | desmatamento anual por estado e por bioma (km²) | `data/raw/prodes/prodes_estados.csv`, `prodes_biomas.csv` |
++| mapbiomas | idem, em hectares (convertidos para km²) | `data/raw/mapbiomas/mapbiomas_estados.csv`, `mapbiomas_biomas.csv` |
++| inmet | temperatura média e precipitação total anuais por estado e por bioma | `data/raw/inmet/*.CSV` + `estacoes_bioma.csv` |
++| agregados | **Brasil**: desmatamento = soma dos biomas; clima = média dos estados (anos com ≥ 20 estados) | banco |
++| projecao | regressão linear (scikit-learn) sobre os últimos 15 anos, 7 anos à frente, intervalo de previsão de 95% | banco |
++| insights | textos de insight (RF18) por localidade e tela | banco |
+ 
+-Stack definida: Python + FastAPI, PostgreSQL (sem PostGIS não há geometria envolvida, só coordenadas simples e dados tabulares), deploy em nuvem (Render/Railway).
++Regras que valem para toda a API:
+ 
+-## Contrato de API
++- **Fonte do desmatamento**: PRODES; o MapBiomas só entra em localidades que não têm PRODES. As duas fontes nunca se misturam na mesma série.
++- **Estado e bioma são recortes diferentes dos mesmos dados e nunca são somados entre si.** Por isso o Brasil é a soma dos *biomas*. Se menos de 6 biomas estiverem carregados, o ETL avisa que o total nacional está incompleto.
++- **Modelo**: é estimativa de tendência, não previsão determinística. O ETL grava MAE, RMSE e R² da validação (últimos 3 anos, um passo à frente) em `data/processed/metricas_modelo.json`.
++- **Textos**: saem de templates. Se `GEMINI_API_KEY` e `GEMINI_MODEL` estiverem definidos, o Gemini reescreve o template, mas a versão do modelo só é aceita se não tiver nenhum número que não esteja no template (o LLM não calcula nem inventa dado). Falhou ou foi rejeitado: fica o template.
++- Os números que originaram cada texto ficam em `insight.metricas_origem` (inclusive o ponto de estabilização da projeção).
+ 
+-| Endpoint | Método | Query params | Retorna |
+-|---|---|---|---|
+-| `/api/v1/localidades` | GET | - | Lista de estados/biomas para o filtro |
+-| `/api/v1/overview` | GET | `localidade` (opcional; ausente = Brasil), `ano_inicio`, `ano_fim` | KPIs + série histórica + insight + data de atualização |
+-| `/api/v1/climate-correlation` | GET | `localidade`, `start`, `end` | série cruzando desmatamento x clima + insight |
+-| `/api/v1/projection` | GET | `localidade`, `horizon` | série histórica + projeção regional **e** nacional + insight |
++## Contrato de API (v1, somente leitura, sem autenticação)
+ 
+-*(Exportação de CSV/PNG saiu do contrato fica client-side no Vue: CSV a partir dos dados já carregados, PNG via exportação do próprio canvas do gráfico, sem precisar de endpoint no backend.)*
++Prefixo `/api/v1`. Sem `localidade` = Brasil. A documentação interativa fica em `/docs`.
+ 
+-### Exemplo de resposta `/api/v1/overview`
++| Endpoint | Parâmetros | Retorna |
++|---|---|---|
++| `GET /health` | — | `{"status": "ok"}` (testa o banco) |
++| `GET /localidades` | — | lista de `{id, nome, sigla_uf, tipo, regiao}`; `tipo` = `PAIS` \| `ESTADO` \| `BIOMA` |
++| `GET /overview` | `localidade`, `ano_inicio`, `ano_fim` | `kpis`, `bioma_critico`, `serie_historica`, `insight`, `atualizado_em` |
++| `GET /climate-correlation` | `localidade`, `ano_inicio`, `ano_fim` | `serie`, `indicadores`, `insight`, `atualizado_em` |
++| `GET /projection` | `localidade`, `horizonte` | `geral`, `regional`, `atualizado_em` |
++
++`localidade` é o **id** devolvido por `/localidades`. Erros: `404` com `detail` explicando (localidade inexistente, sem dados, ETL ainda não rodou) e `422` para parâmetros inválidos (ex.: `ano_inicio` maior que `ano_fim`).
++
++### `/overview`
+ 
+ ```json
+ {
+-  "kpis": [
+-    {
+-      "region": "AM",
+-      "area_desmatada_km2": 1234.5,
+-      "variacao_percentual": 3.2,
+-      "ano_referencia": 2024
+-    }
+-  ],
+-  "serie_historica": [
+-    { "ano": 2004, "area_km2": 27772 },
+-    { "ano": 2023, "area_km2": 9001 }
+-  ],
+-  "insight": "A área desmatada em 2023 caiu 22% em relação a 2022.",
+-  "atualizado_em": "2026-08-15T00:00:00Z"
++  "kpis": [{ "region": "PA", "area_desmatada_km2": 3272.4, "variacao_percentual": -21.0, "ano_referencia": 2023 }],
++  "bioma_critico": "Amazônia",
++  "serie_historica": [{ "ano": 2022, "area_km2": 4141.0 }, { "ano": 2023, "area_km2": 3272.4 }],
++  "insight": "Pará: a área desmatada em 2023 foi de 3.272 km², uma queda de 21,0% em relação a 2022 (4.141 km²). …",
++  "atualizado_em": "2026-10-25T21:27:00Z"
+ }
+ ```
+ 
+-*(Os demais endpoints seguem o mesmo padrão: resposta JSON tipada, sem implementação real ainda isso fica para os próximos cards de backend.)*
++- `kpis[0].region`: `BR` para o Brasil, a sigla para estado, o nome para bioma. `variacao_percentual` é `null` se não houver o ano anterior.
++- `bioma_critico`: bioma com a maior área desmatada no ano de referência (calculado sobre os biomas, não depende do filtro).
++- `insight` e `atualizado_em` podem ser `null` antes da primeira execução do ETL.
++
++### `/climate-correlation`
++
++```json
++{
++  "serie": [{ "ano": 2023, "area_km2": 3272.4, "temperatura_media_c": 27.3, "precipitacao_mm": 1900.0 }],
++  "indicadores": {
++    "taxa_supressao_pct": 8.4, "anomalia_termica_c": 0.6, "deficit_hidrico_mm": -276.0,
++    "coef_correlacao_temperatura": -0.07, "coef_correlacao_precipitacao": 0.08
++  },
++  "insight": "Pará: entre 2014 e 2023, a correlação entre o desmatamento e a temperatura média foi de -0,07 …",
++  "atualizado_em": "2026-10-25T21:27:00Z"
++}
++```
++
++- `serie` só tem os anos com desmatamento **e** clima. 404 se não houver nenhum.
++- `indicadores` valem para o período devolvido: taxa de supressão = média das variações anuais (últimos 10 anos); anomalia térmica e déficit hídrico = último ano menos a média do período; coeficientes de Pearson (`null` com menos de 3 anos ou série constante).
++
++### `/projection`
++
++```json
++{
++  "geral": {
++    "serie_historica": [{ "ano": 2023, "area_km2": 9001.0 }],
++    "projecao": [{ "ano": 2024, "valor_projetado_km2": 8450.0, "intervalo_inferior": 7300.0, "intervalo_superior": 9700.0 }],
++    "ponto_estabilizacao": 2028,
++    "insight": "Brasil: se a tendência atual continuar, a área desmatada deve chegar a cerca de …"
++  },
++  "regional": null,
++  "atualizado_em": "2026-10-25T21:27:00Z"
++}
++```
++
++- `geral` é o Brasil; `regional` só vem com `localidade` (e `null` se ela for o próprio Brasil). Cada visão tem o próprio histórico (últimos 6 anos), projeção e texto.
++- `horizonte` limita quantos anos projetados voltam (padrão: todos os calculados, 7).
++- `ponto_estabilizacao`: **critério provisório**: primeiro ano projetado com variação anual menor que 1% (em módulo); `null` se não houver ou se cair fora do horizonte pedido. Precisa ser validado com a equipe de Dados/IA.
++
++## Pontos em aberto
++
++1. Critério do "Ponto de Estabilização" (acima).
++2. O clima por **bioma** depende do arquivo `estacoes_bioma.csv` (estação → bioma). Biomas sem estação mapeada respondem 404 em `/climate-correlation`.
++3. O clima do **Brasil** só existe nos anos com pelo menos 20 estados com dado (`MIN_ESTADOS_BRASIL`); nos anos iniciais do INMET isso encurta a série.
++4. A revisão pedagógica dos textos pela equipe de extensão (RF21) não tem campo no DER; hoje os textos vão direto para a API.
++5. Bancos criados antes desta versão precisam rodar `database/migracoes/001_pais_e_insight_unico.sql`.
+diff --git a/ecomonitor-frontend/src/types/api.ts b/ecomonitor-frontend/src/types/api.ts
+index 86361c0..44ad186 100644
+--- a/ecomonitor-frontend/src/types/api.ts
++++ b/ecomonitor-frontend/src/types/api.ts
+@@ -1,6 +1,7 @@
+ // Interfaces espelhando o contrato da API (v1). Ajuste aqui se o contrato mudar.
+ 
+-export type TipoLocalidade = 'ESTADO' | 'BIOMA'
++// PAIS é o registro "Brasil" (aparece em /localidades; os filtros mostram só ESTADO e BIOMA)
++export type TipoLocalidade = 'PAIS' | 'ESTADO' | 'BIOMA'
+ 
+ export interface Localidade {
+   id: number
+@@ -13,7 +14,7 @@ export interface Localidade {
+ export interface Kpi {
+   region: string
+   area_desmatada_km2: number
+-  variacao_percentual: number
++  variacao_percentual: number | null // null se não houver ano anterior para comparar
+   ano_referencia: number
+ }
+ 
+@@ -30,20 +31,18 @@ export interface OverviewParams {
+ 
+ export interface OverviewResponse {
+   kpis: Kpi[]
+-  // PENDENTE NO CONTRATO: o card "Bioma crítico" (RF06) precisa deste campo,
+-  // que ainda não consta em /api/v1/overview.
+-  bioma_critico: string
++  bioma_critico: string | null // bioma com a maior área desmatada no ano de referência (RF06)
+   serie_historica: SeriePonto[]
+-  insight: string
+-  atualizado_em: string
++  insight: string | null // texto gerado pelo ETL (RF18); null se ainda não foi gerado
++  atualizado_em: string | null // última atualização bem-sucedida dos dados (UTC)
+ }
+ 
+ // ---- /api/v1/climate-correlation ----
+ 
+ export interface ClimateCorrelationParams {
+   localidade?: number | null // ausente/null = Brasil
+-  start?: number
+-  end?: number
++  ano_inicio?: number
++  ano_fim?: number
+ }
+ 
+ export interface ClimaPonto {
+@@ -53,28 +52,27 @@ export interface ClimaPonto {
+   precipitacao_mm: number
+ }
+ 
+-// PENDENTE NO CONTRATO: os 3 cards da tela (RF08) precisam destes indicadores,
+-// que ainda não constam na resposta de /api/v1/climate-correlation.
++// Indicadores dos 3 cards da tela (RF08), calculados pela API para o período devolvido.
+ export interface IndicadoresClimaticos {
+-  taxa_supressao_pct: number
++  taxa_supressao_pct: number | null
+   anomalia_termica_c: number
+   deficit_hidrico_mm: number
+-  coef_correlacao_temperatura: number
+-  coef_correlacao_precipitacao: number
++  coef_correlacao_temperatura: number | null // null com menos de 3 anos ou série constante
++  coef_correlacao_precipitacao: number | null
+ }
+ 
+ export interface ClimateCorrelationResponse {
+   serie: ClimaPonto[]
+   indicadores: IndicadoresClimaticos
+-  insight: string
+-  atualizado_em: string
++  insight: string | null
++  atualizado_em: string | null
+ }
+ 
+ // ---- /api/v1/projection ----
+ 
+ export interface ProjectionParams {
+   localidade?: number | null // ausente/null = só a visão Geral (Brasil)
+-  horizon?: number
++  horizonte?: number // anos à frente (padrão: todos os calculados)
+ }
+ 
+ export interface ProjecaoPonto {
+@@ -87,16 +85,16 @@ export interface ProjecaoPonto {
+ export interface VisaoProjecao {
+   serie_historica: SeriePonto[]
+   projecao: ProjecaoPonto[]
+-  // PENDENTE: critério do "Ponto de Estabilização". No mock, é o primeiro ano projetado
+-  // com variação anual menor que 1% (em módulo). Definir com a equipe de Dados/IA.
++  // PROVISÓRIO: primeiro ano projetado com variação anual menor que 1% (em módulo).
++  // O critério ainda precisa ser validado com a equipe de Dados/IA.
+   ponto_estabilizacao: number | null
+-  insight: string
++  insight: string | null
+ }
+ 
+-// PENDENTE NO CONTRATO: o Figma alterna entre Geral e Regional, e cada visão precisa do
+-// próprio histórico, projeção e texto. O contrato atual traz só uma `serie_historica`.
++// Cada visão (Geral = Brasil, Regional = localidade escolhida) traz o próprio histórico,
++// projeção e texto, porque o Figma alterna entre as duas.
+ export interface ProjectionResponse {
+   geral: VisaoProjecao
+   regional: VisaoProjecao | null // null quando nenhuma localidade está selecionada
+-  atualizado_em: string
++  atualizado_em: string | null
+ }
+diff --git a/ecomonitor-frontend/src/views/CorrelacaoClimaticaView.vue b/ecomonitor-frontend/src/views/CorrelacaoClimaticaView.vue
+index 09fbec9..527d87e 100644
+--- a/ecomonitor-frontend/src/views/CorrelacaoClimaticaView.vue
++++ b/ecomonitor-frontend/src/views/CorrelacaoClimaticaView.vue
+@@ -96,7 +96,11 @@ onBeforeUnmount(() => exportacao.limpar())
+           <IndicadorCard
+             titulo="Supressão"
+             icone="tree"
+-            :valor="indicadores ? `${pct.format(indicadores.taxa_supressao_pct)}%` : '—'"
++            :valor="
++              indicadores?.taxa_supressao_pct != null
++                ? `${pct.format(indicadores.taxa_supressao_pct)}%`
++                : '—'
++            "
+             descricao="Variação média anual do desmatamento no período."
+             :cor-valor="supressaoEmAlta ? '#93000a' : '#1e3b1a'"
+             :cor-brilho="supressaoEmAlta ? 'rgba(147, 0, 10, 0.2)' : 'rgba(30, 59, 26, 0.1)'"
+diff --git a/ecomonitor-frontend/src/views/VisaoGeralView.vue b/ecomonitor-frontend/src/views/VisaoGeralView.vue
+index a6b9631..841adfa 100644
+--- a/ecomonitor-frontend/src/views/VisaoGeralView.vue
++++ b/ecomonitor-frontend/src/views/VisaoGeralView.vue
+@@ -63,7 +63,11 @@ onBeforeUnmount(() => exportacao.limpar())
+           :class="{ 'visao-geral__tendencia--alta': tendenciaCrescente }"
+         >
+           <AppIcon :name="tendenciaCrescente ? 'trending-up' : 'trending-down'" :size="28" />
+-          {{ kpi ? `${percentual.format(kpi.variacao_percentual)}%` : '—' }}
++          {{
++            kpi?.variacao_percentual != null
++              ? `${percentual.format(kpi.variacao_percentual)}%`
++              : '—'
++          }}
+         </span>
+       </KpiCard>
+     </section>
+diff --git a/etl/pipeline/agregados.py b/etl/pipeline/agregados.py
+new file mode 100644
+index 0000000..0fa8e0a
+--- /dev/null
++++ b/etl/pipeline/agregados.py
+@@ -0,0 +1,76 @@
++"""Brasil = agregação das outras localidades (nenhuma fonte entrega o país pronto).
++
++* Desmatamento: soma dos BIOMAS (os biomas cobrem o país sem sobreposição). Somar estados
++  e biomas juntos contaria a mesma área duas vezes.
++* Clima: média dos ESTADOS, só nos anos com pelo menos MIN_ESTADOS_BRASIL estados.
++"""
++from . import config
++
++
++def _brasil_id(conn):
++    with conn.cursor() as cur:
++        cur.execute("SELECT id FROM localidade WHERE tipo = 'PAIS'")
++        linha = cur.fetchone()
++    if not linha:
++        raise RuntimeError("Registro 'Brasil' não existe. Rode a etapa de localidades (seed).")
++    return linha[0]
++
++
++def _desmatamento(conn, brasil_id):
++    with conn.cursor() as cur:
++        cur.execute(
++            """SELECT d.fonte, d.ano, SUM(d.area_km2), COUNT(DISTINCT d.localidade_id)
++               FROM desmatamento_anual d JOIN localidade l ON l.id = d.localidade_id
++               WHERE l.tipo = 'BIOMA'
++               GROUP BY d.fonte, d.ano ORDER BY d.fonte, d.ano"""
++        )
++        linhas = cur.fetchall()
++
++    por_fonte = {}
++    for fonte, ano, total, n in linhas:
++        por_fonte.setdefault(fonte, []).append((ano, total, n))
++
++    inseridos = 0
++    with conn.cursor() as cur:
++        for fonte, anos in por_fonte.items():
++            n_biomas = max(n for _, _, n in anos)
++            if n_biomas < 6:
++                print(f"  [agregados] AVISO: o Brasil de {fonte} soma só {n_biomas} de 6 biomas; "
++                      f"carregue os 6 para o total nacional ficar completo.")
++            # só os anos em que todos os biomas disponíveis da fonte têm dado
++            validos = [(ano, total) for ano, total, n in anos if n == n_biomas]
++            cur.execute("DELETE FROM desmatamento_anual WHERE localidade_id = %s AND fonte = %s",
++                        (brasil_id, fonte))
++            for ano, total in validos:
++                cur.execute(
++                    "INSERT INTO desmatamento_anual (localidade_id, ano, area_km2, fonte) "
++                    "VALUES (%s, %s, %s, %s)", (brasil_id, ano, float(total), fonte))
++                inseridos += 1
++    return inseridos
++
++
++def _clima(conn, brasil_id):
++    with conn.cursor() as cur:
++        cur.execute(
++            """SELECT c.ano, AVG(c.temperatura_media_c), AVG(c.precipitacao_mm), COUNT(*)
++               FROM dado_climatico c JOIN localidade l ON l.id = c.localidade_id
++               WHERE l.tipo = 'ESTADO'
++                 AND c.temperatura_media_c IS NOT NULL AND c.precipitacao_mm IS NOT NULL
++               GROUP BY c.ano HAVING COUNT(*) >= %s ORDER BY c.ano""",
++            (config.MIN_ESTADOS_BRASIL,),
++        )
++        linhas = cur.fetchall()
++        cur.execute("DELETE FROM dado_climatico WHERE localidade_id = %s", (brasil_id,))
++        for ano, temp, prec, _ in linhas:
++            cur.execute(
++                "INSERT INTO dado_climatico (localidade_id, ano, temperatura_media_c, "
++                "precipitacao_mm, fonte) VALUES (%s, %s, %s, %s, 'INMET')",
++                (brasil_id, ano, round(float(temp), 2), round(float(prec), 1)))
++    if not linhas:
++        print(f"  [agregados] clima do Brasil: nenhum ano com {config.MIN_ESTADOS_BRASIL}+ estados")
++    return len(linhas)
++
++
++def executar(conn):
++    brasil_id = _brasil_id(conn)
++    return _desmatamento(conn, brasil_id) + _clima(conn, brasil_id)
+diff --git a/etl/pipeline/config.py b/etl/pipeline/config.py
+index 06e5b19..165c849 100644
+--- a/etl/pipeline/config.py
++++ b/etl/pipeline/config.py
+@@ -35,4 +35,24 @@ MAPBIOMAS_UNIDADE = "ha"
+ CLIMA_ANO_PRODES = True
+ 
+ # Fração mínima das 8760 horas do ano com dado para a estação-ano valer
+-CLIMA_COBERTURA_MIN = 0.8
+\ No newline at end of file
++CLIMA_COBERTURA_MIN = 0.8
++
++# ---------------------------------------------------------------------------
++# Brasil, projeção e textos de insight
++# ---------------------------------------------------------------------------
++PROCESSED_DIR = DATA_DIR / "processed"
++
++# O "Brasil" do clima é a média dos estados; só vale no ano com pelo menos este
++# número de estados com dado (nos anos iniciais o INMET tem poucas estações).
++MIN_ESTADOS_BRASIL = int(os.getenv("MIN_ESTADOS_BRASIL", "20"))
++
++# Modelo de projeção (regressão linear sobre o tempo)
++ANOS_PROJECAO = int(os.getenv("ANOS_PROJECAO", "7"))   # anos à frente
++JANELA_MODELO = int(os.getenv("JANELA_MODELO", "15"))  # usa só os últimos N anos
++MIN_ANOS_MODELO = int(os.getenv("MIN_ANOS_MODELO", "8"))  # mínimo de anos para projetar
++
++# Reescrita opcional dos textos com Gemini. Sem chave E modelo, usa só o template.
++# O nome do modelo muda com o tempo: confira o atual em https://ai.google.dev/gemini-api/docs/models
++GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or None
++GEMINI_MODEL = os.getenv("GEMINI_MODEL") or None
++USAR_LLM = True  # run_etl.py coloca False com --sem-llm
+diff --git a/etl/pipeline/consultas.py b/etl/pipeline/consultas.py
+new file mode 100644
+index 0000000..79e73d1
+--- /dev/null
++++ b/etl/pipeline/consultas.py
+@@ -0,0 +1,53 @@
++"""Leituras do banco usadas pelas etapas de agregados, projeção e insights."""
++from collections import defaultdict
++
++FONTE_PREFERIDA = "PRODES"
++
++
++def localidades(conn) -> dict:
++    """id -> {nome, tipo}."""
++    with conn.cursor() as cur:
++        cur.execute("SELECT id, nome, tipo FROM localidade")
++        return {i: {"nome": n, "tipo": t} for i, n, t in cur.fetchall()}
++
++
++def series_desmatamento(conn) -> dict:
++    """localidade_id -> {fonte, anos, valores}. Usa o PRODES; se a localidade não tiver
++    PRODES, usa o MapBiomas (nunca mistura as duas fontes na mesma série)."""
++    por_loc = defaultdict(lambda: defaultdict(list))
++    with conn.cursor() as cur:
++        cur.execute("SELECT localidade_id, fonte, ano, area_km2 FROM desmatamento_anual "
++                    "ORDER BY localidade_id, ano")
++        for loc, fonte, ano, area in cur.fetchall():
++            por_loc[loc][fonte].append((ano, area))
++    saida = {}
++    for loc, fontes in por_loc.items():
++        fonte = FONTE_PREFERIDA if FONTE_PREFERIDA in fontes else sorted(fontes)[0]
++        pares = fontes[fonte]
++        saida[loc] = {"fonte": fonte, "anos": [a for a, _ in pares], "valores": [v for _, v in pares]}
++    return saida
++
++
++def series_clima(conn) -> dict:
++    """localidade_id -> {ano: (temperatura, precipitação)}, só anos com os dois valores."""
++    saida = defaultdict(dict)
++    with conn.cursor() as cur:
++        cur.execute("SELECT localidade_id, ano, temperatura_media_c, precipitacao_mm "
++                    "FROM dado_climatico WHERE temperatura_media_c IS NOT NULL "
++                    "AND precipitacao_mm IS NOT NULL")
++        for loc, ano, temp, prec in cur.fetchall():
++            saida[loc][ano] = (temp, prec)
++    return saida
++
++
++def projecao_vigente(conn, localidade_id):
++    """Pontos da projeção mais recente: [(ano_projetado, valor, inferior, superior)]."""
++    with conn.cursor() as cur:
++        cur.execute(
++            """SELECT ano_projetado, valor_projetado_km2, intervalo_inferior, intervalo_superior
++               FROM projecao WHERE localidade_id = %s
++                 AND ano_base = (SELECT MAX(ano_base) FROM projecao WHERE localidade_id = %s)
++               ORDER BY ano_projetado""",
++            (localidade_id, localidade_id),
++        )
++        return cur.fetchall()
+diff --git a/etl/pipeline/estatistica.py b/etl/pipeline/estatistica.py
+new file mode 100644
+index 0000000..53e528c
+--- /dev/null
++++ b/etl/pipeline/estatistica.py
+@@ -0,0 +1,35 @@
++"""Funções estatísticas simples usadas nos textos de insight.
++
++As mesmas fórmulas existem em backend/app/services/indicadores.py (a API calcula os
++indicadores na hora, respeitando o período pedido). Mantenha as duas em sincronia.
++"""
++import statistics
++from collections.abc import Sequence
++
++
++def variacao_percentual(atual, anterior):
++    if anterior is None or anterior == 0:
++        return None
++    return (atual - anterior) / anterior * 100
++
++
++def taxa_supressao_pct(areas: Sequence[float], ultimos_anos: int = 10):
++    """Média das variações anuais (%) nos últimos anos da série."""
++    janela = list(areas)[-(ultimos_anos + 1):]
++    variacoes = [v for a, b in zip(janela, janela[1:])
++                 if (v := variacao_percentual(b, a)) is not None]
++    return statistics.fmean(variacoes) if variacoes else None
++
++
++def correlacao(x: Sequence[float], y: Sequence[float]):
++    """Pearson; None com menos de 3 pontos ou sem variação em uma das séries."""
++    if len(x) != len(y) or len(x) < 3:
++        return None
++    if statistics.pstdev(x) == 0 or statistics.pstdev(y) == 0:
++        return None
++    return statistics.correlation(x, y)
++
++
++def desvio_da_media(valores: Sequence[float]) -> float:
++    """Último valor menos a média da série (anomalia térmica e déficit hídrico)."""
++    return valores[-1] - statistics.fmean(valores)
+diff --git a/etl/pipeline/insights.py b/etl/pipeline/insights.py
+new file mode 100644
+index 0000000..c9c90cf
+--- /dev/null
++++ b/etl/pipeline/insights.py
+@@ -0,0 +1,106 @@
++"""Gera e grava os textos de insight (RF18) de cada localidade e tela.
++
++Guarda em insight.metricas_origem os números que originaram o texto (e, na projeção,
++o ponto de estabilização), assim a API devolve o texto sem recalcular nada.
++"""
++import json
++
++from . import config, consultas, estatistica, modelo, textos
++
++
++def _reescritor():
++    if not (config.USAR_LLM and config.GEMINI_API_KEY and config.GEMINI_MODEL):
++        return None
++    base = textos.criar_reescritor_gemini(config.GEMINI_API_KEY, config.GEMINI_MODEL)
++    falhas = {"seguidas": 0}
++
++    def resiliente(texto):
++        if falhas["seguidas"] >= 3:  # desiste do LLM (cota/chave) e segue só com templates
++            return None
++        try:
++            saida = base(texto)
++            falhas["seguidas"] = 0
++            return saida
++        except Exception:
++            falhas["seguidas"] += 1
++            raise
++
++    return resiliente
++
++
++def _metricas_visao_geral(nome, s):
++    anos, valores = s["anos"], s["valores"]
++    ano, area = anos[-1], valores[-1]
++    anterior = valores[-2] if len(anos) > 1 and anos[-2] == ano - 1 else None
++    i_min = min(range(len(valores)), key=valores.__getitem__)
++    i_max = max(range(len(valores)), key=valores.__getitem__)
++    return {
++        "nome": nome, "fonte": s["fonte"], "ano_inicial": anos[0], "ano": ano, "area_km2": area,
++        "ano_anterior": ano - 1 if anterior is not None else None, "area_anterior": anterior,
++        "variacao_pct": estatistica.variacao_percentual(area, anterior),
++        "ano_min": anos[i_min], "area_min": valores[i_min],
++        "ano_max": anos[i_max], "area_max": valores[i_max],
++    }
++
++
++def _metricas_correlacao(nome, s, clima):
++    pares = [(a, v) for a, v in zip(s["anos"], s["valores"]) if a in clima]
++    if len(pares) < 3:
++        return None
++    anos = [a for a, _ in pares]
++    areas = [v for _, v in pares]
++    temps = [clima[a][0] for a in anos]
++    chuvas = [clima[a][1] for a in anos]
++    return {
++        "nome": nome, "ano_inicial": anos[0], "ano_final": anos[-1],
++        "r_temp": estatistica.correlacao(areas, temps), "r_prec": estatistica.correlacao(areas, chuvas),
++        "anomalia_c": estatistica.desvio_da_media(temps), "deficit_mm": estatistica.desvio_da_media(chuvas),
++        "taxa_supressao_pct": estatistica.taxa_supressao_pct(areas),
++    }
++
++
++def _metricas_projecao(nome, s, pontos):
++    if not pontos:
++        return None
++    base = s["valores"][-1]
++    final = pontos[-1]
++    return {
++        "nome": nome, "ano_base": s["anos"][-1], "base_km2": base,
++        "ano_final": final[0], "final_km2": final[1], "inferior": final[2], "superior": final[3],
++        "variacao_pct": estatistica.variacao_percentual(final[1], base),
++        "estabilizacao": modelo.ponto_estabilizacao(base, [(a, v) for a, v, _, _ in pontos]),
++    }
++
++
++def _gravar(cur, loc_id, tela, texto, metricas):
++    cur.execute("DELETE FROM insight WHERE localidade_id = %s AND tela = %s", (loc_id, tela))
++    cur.execute(
++        "INSERT INTO insight (localidade_id, tela, texto_gerado, metricas_origem) "
++        "VALUES (%s, %s, %s, %s)", (loc_id, tela, texto, json.dumps(metricas, default=float)))
++
++
++def executar(conn):
++    nomes = consultas.localidades(conn)
++    series = consultas.series_desmatamento(conn)
++    clima = consultas.series_clima(conn)
++    reescritor = _reescritor()
++    gravados, com_llm = 0, 0
++
++    with conn.cursor() as cur:
++        for loc_id, s in sorted(series.items()):
++            nome = nomes[loc_id]["nome"]
++            candidatos = {
++                "VISAO_GERAL": _metricas_visao_geral(nome, s),
++                "CORRELACAO_CLIMATICA": _metricas_correlacao(nome, s, clima.get(loc_id, {})),
++                "PROJECAO_TENDENCIA": _metricas_projecao(nome, s, consultas.projecao_vigente(conn, loc_id)),
++            }
++            for tela, metricas in candidatos.items():
++                if metricas is None:
++                    continue
++                texto, usou = textos.gerar_texto(tela, metricas, reescritor)
++                _gravar(cur, loc_id, tela, texto, metricas)
++                gravados += 1
++                com_llm += usou
++    if reescritor:
++        print(f"  [insights] {com_llm} de {gravados} textos reescritos com o Gemini")
++    return gravados
+diff --git a/etl/pipeline/modelo.py b/etl/pipeline/modelo.py
+new file mode 100644
+index 0000000..29e0130
+--- /dev/null
++++ b/etl/pipeline/modelo.py
+@@ -0,0 +1,121 @@
++"""Projeção de tendência (RF09/RF10): regressão linear sobre o tempo com intervalo de 95%.
++
++A tendência vem do scikit-learn (LinearRegression); a margem de incerteza usa a fórmula
++clássica do intervalo de previsão da regressão linear simples. É uma estimativa
++estatística de tendência, não uma previsão determinística.
++"""
++import json
++from dataclasses import dataclass
++from datetime import datetime, timezone
++
++import numpy as np
++from psycopg2.extras import execute_values
++from scipy import stats
++from sklearn.linear_model import LinearRegression
++
++from . import config, consultas
++
++
++@dataclass(frozen=True)
++class Ponto:
++    ano: int
++    valor: float
++    inferior: float
++    superior: float
++
++
++def projetar(anos, valores, horizonte, janela=15, nivel=0.95):
++    """Projeta os próximos `horizonte` anos a partir dos últimos `janela` anos da série."""
++    x = np.asarray(anos[-janela:], dtype=float)
++    y = np.asarray(valores[-janela:], dtype=float)
++    n = len(x)
++    if n < 3:
++        raise ValueError("São necessários ao menos 3 anos de dados para projetar.")
++
++    modelo = LinearRegression().fit(x.reshape(-1, 1), y)
++    residuos = y - modelo.predict(x.reshape(-1, 1))
++    erro_padrao = float(np.sqrt(np.sum(residuos ** 2) / (n - 2)))
++    sxx = float(np.sum((x - x.mean()) ** 2))
++    t_critico = float(stats.t.ppf(1 - (1 - nivel) / 2, n - 2))
++
++    futuros = np.arange(x[-1] + 1, x[-1] + horizonte + 1)
++    previsto = modelo.predict(futuros.reshape(-1, 1))
++    margem = t_critico * erro_padrao * np.sqrt(1 + 1 / n + (futuros - x.mean()) ** 2 / sxx)
++
++    pontos = []
++    for ano, p, m in zip(futuros, previsto, margem):
++        valor = max(0.0, float(p))  # área desmatada não pode ser negativa
++        inferior = min(valor, max(0.0, float(p - m)))
++        superior = max(valor, float(p + m))
++        pontos.append(Ponto(int(ano), valor, inferior, superior))
++    return pontos
++
++
++def avaliar(anos, valores, janela=15, n_teste=3, min_treino=5):
++    """Validação nos últimos anos: ajusta com o passado e prevê o ano seguinte, ano a ano."""
++    reais, previstos = [], []
++    for i in range(max(min_treino, len(valores) - n_teste), len(valores)):
++        previstos.append(projetar(anos[:i], valores[:i], 1, janela)[0].valor)
++        reais.append(float(valores[i]))
++    if not reais:
++        return {"n_teste": 0, "mae": None, "rmse": None, "r2": None}
++    r, p = np.asarray(reais), np.asarray(previstos)
++    erro = r - p
++    ss_tot = float(np.sum((r - r.mean()) ** 2))
++    return {
++        "n_teste": len(reais),
++        "mae": float(np.mean(np.abs(erro))),
++        "rmse": float(np.sqrt(np.mean(erro ** 2))),
++        "r2": float(1 - np.sum(erro ** 2) / ss_tot) if len(r) >= 2 and ss_tot > 0 else None,
++    }
++
++
++def ponto_estabilizacao(base, projecao, limite_pct=1.0):
++    """Primeiro ano projetado cuja variação anual (em módulo) fica abaixo de `limite_pct`.
++
++    CRITÉRIO PROVISÓRIO: a definição de "Ponto de Estabilização" ainda precisa ser
++    validada com a equipe de Dados/IA.
++    """
++    anterior = base
++    for ano, valor in projecao:
++        if anterior > 0 and abs((valor - anterior) / anterior * 100) < limite_pct:
++            return ano
++        anterior = valor
++    return None
++
++
++def executar(conn):
++    nomes = consultas.localidades(conn)
++    series = consultas.series_desmatamento(conn)
++    metricas, total = {}, 0
++
++    with conn.cursor() as cur:
++        for loc_id, s in sorted(series.items()):
++            nome = nomes[loc_id]["nome"]
++            if len(s["anos"]) < config.MIN_ANOS_MODELO:
++                print(f"  [projecao] {nome}: só {len(s['anos'])} anos de dados "
++                      f"(mínimo {config.MIN_ANOS_MODELO}); sem projeção")
++                continue
++            pontos = projetar(s["anos"], s["valores"], config.ANOS_PROJECAO, config.JANELA_MODELO)
++            ano_base = s["anos"][-1]
++            cur.execute("DELETE FROM projecao WHERE localidade_id = %s", (loc_id,))
++            execute_values(
++                cur,
++                "INSERT INTO projecao (localidade_id, ano_base, ano_projetado, valor_projetado_km2, "
++                "intervalo_inferior, intervalo_superior) VALUES %s",
++                [(loc_id, ano_base, p.ano, p.valor, p.inferior, p.superior) for p in pontos],
++            )
++            total += len(pontos)
++            metricas[nome] = {"fonte": s["fonte"], "ano_base": ano_base,
++                              **avaliar(s["anos"], s["valores"], config.JANELA_MODELO)}
++
++    # Métricas de validação (MAE, RMSE, R²) para consulta e para o capítulo de metodologia
++    config.PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
++    saida = config.PROCESSED_DIR / "metricas_modelo.json"
++    saida.write_text(json.dumps({
++        "gerado_em": datetime.now(timezone.utc).isoformat(),
++        "modelo": "LinearRegression (scikit-learn) sobre o ano; intervalo de previsão de 95%",
++        "janela_anos": config.JANELA_MODELO, "anos_projetados": config.ANOS_PROJECAO,
++        "localidades": metricas}, ensure_ascii=False, indent=2), encoding="utf-8")
++    print(f"  [projecao] métricas de validação em {saida}")
++    return total
+diff --git a/etl/pipeline/run_etl.py b/etl/pipeline/run_etl.py
+index c2f275c..7de7aff 100644
+--- a/etl/pipeline/run_etl.py
++++ b/etl/pipeline/run_etl.py
+@@ -3,13 +3,18 @@ import sys
+ import traceback
+ from datetime import datetime, timezone
+ 
+-from . import etl_inmet, etl_mapbiomas, etl_prodes, seed_localidades
++from . import (agregados, config, etl_inmet, etl_mapbiomas, etl_prodes, insights, modelo,
++               seed_localidades)
+ from .common import conectar
+ 
+ ETAPAS = {
+     "prodes": etl_prodes.executar,
+     "mapbiomas": etl_mapbiomas.executar,
+     "inmet": etl_inmet.executar,
++    # etapas derivadas (rodam depois das fontes)
++    "agregados": agregados.executar,   # Brasil = soma dos biomas / média dos estados
++    "projecao": modelo.executar,       # modelo de regressão (RF09/RF10)
++    "insights": insights.executar,     # textos de insight (RF18)
+ }
+ 
+ 
+@@ -33,8 +38,11 @@ def atualizar_status(conn, sucesso):
+ def main():
+     parser = argparse.ArgumentParser(description="ETL EcoMonitor")
+     parser.add_argument("--fontes", default=",".join(ETAPAS),
+-                        help="lista separada por vírgula: prodes,mapbiomas,inmet")
++                        help="lista separada por vírgula: " + ",".join(ETAPAS))
++    parser.add_argument("--sem-llm", action="store_true",
++                        help="gera os insights só com templates, sem chamar o Gemini")
+     args = parser.parse_args()
++    config.USAR_LLM = not args.sem_llm
+     fontes = [f.strip() for f in args.fontes.split(",") if f.strip()]
+     invalidas = [f for f in fontes if f not in ETAPAS]
+     if invalidas:
+diff --git a/etl/pipeline/seed_localidades.py b/etl/pipeline/seed_localidades.py
+index 4892c30..82dbcc0 100644
+--- a/etl/pipeline/seed_localidades.py
++++ b/etl/pipeline/seed_localidades.py
+@@ -29,4 +29,5 @@ def executar(conn):
+             cur.execute(SQL, (nome, uf, "ESTADO", regiao))
+         for nome in BIOMAS:
+             cur.execute(SQL, (nome, None, "BIOMA", None))
+-    return len(ESTADOS) + len(BIOMAS)
++        cur.execute(SQL, ("Brasil", None, "PAIS", None))  # série/projeção/insight do país
++    return len(ESTADOS) + len(BIOMAS) + 1
+diff --git a/etl/pipeline/textos.py b/etl/pipeline/textos.py
+new file mode 100644
+index 0000000..4078f37
+--- /dev/null
++++ b/etl/pipeline/textos.py
+@@ -0,0 +1,122 @@
++"""Textos de insight (RF18). O número sempre vem do cálculo; o texto só o descreve.
++
++Por padrão os textos saem de templates (determinísticos). Se houver chave e modelo do
++Gemini, o template pode ser reescrito em linguagem mais natural, mas a versão do LLM só
++é aceita se NÃO contiver nenhum número que não esteja no template: o LLM não calcula
++nem inventa dados.
++"""
++import re
++
++PROMPT_REESCRITA = (
++    "Reescreva o texto abaixo em português do Brasil, em linguagem simples para estudantes, "
++    "com no máximo 3 frases. Não altere, não remova e não acrescente números, anos ou fatos. "
++    "Responda apenas com o texto reescrito.\n\nTexto:\n{texto}"
++)
++
++
++def fmt_int(valor) -> str:
++    return f"{round(valor):,}".replace(",", ".")
++
++
++def fmt_dec(valor, casas=1) -> str:
++    return f"{valor:.{casas}f}".replace(".", ",")
++
++
++def _mudanca(variacao):
++    if abs(variacao) < 0.05:
++        return None
++    return "uma queda" if variacao < 0 else "um aumento"
++
++
++def texto_visao_geral(m) -> str:
++    texto = f"{m['nome']}: a área desmatada em {m['ano']} foi de {fmt_int(m['area_km2'])} km²"
++    v = m.get("variacao_pct")
++    if v is not None and m.get("ano_anterior") is not None:
++        mudanca = _mudanca(v)
++        ref = f"{m['ano_anterior']} ({fmt_int(m['area_anterior'])} km²)"
++        texto += (f", {mudanca} de {fmt_dec(abs(v))}% em relação a {ref}." if mudanca
++                  else f", praticamente igual a {ref}.")
++    else:
++        texto += "."
++    if m["ano_min"] != m["ano_max"]:
++        texto += (f" Na série de {m['ano_inicial']} a {m['ano']}, o menor valor foi em "
++                  f"{m['ano_min']} ({fmt_int(m['area_min'])} km²) e o maior em "
++                  f"{m['ano_max']} ({fmt_int(m['area_max'])} km²).")
++    return texto
++
++
++def texto_correlacao(m) -> str:
++    def trecho(r, rotulo):
++        return f"{rotulo} foi de {fmt_dec(r, 2)}" if r is not None else f"{rotulo} não pôde ser calculada"
++
++    temp = trecho(m.get("r_temp"), "a correlação entre o desmatamento e a temperatura média")
++    chuva = trecho(m.get("r_prec"), "entre o desmatamento e a precipitação")
++    t_dir = "acima" if m["anomalia_c"] >= 0 else "abaixo"
++    p_dir = "acima" if m["deficit_mm"] >= 0 else "abaixo"
++    return (f"{m['nome']}: entre {m['ano_inicial']} e {m['ano_final']}, {temp} e {chuva}. "
++            f"Em {m['ano_final']}, a temperatura média ficou {fmt_dec(abs(m['anomalia_c']))} °C "
++            f"{t_dir} da média do período e a chuva total, {fmt_int(abs(m['deficit_mm']))} mm "
++            f"{p_dir} dela.")
++
++
++def texto_projecao(m) -> str:
++    mudanca = _mudanca(m["variacao_pct"])
++    base = f"{m['ano_base']} ({fmt_int(m['base_km2'])} km²)"
++    comparacao = (f"{mudanca} de {fmt_dec(abs(m['variacao_pct']))}% em relação a {base}" if mudanca
++                  else f"praticamente igual a {base}")
++    texto = (f"{m['nome']}: se a tendência atual continuar, a área desmatada deve chegar a cerca "
++             f"de {fmt_int(m['final_km2'])} km² em {m['ano_final']}, {comparacao}, com margem de "
++             f"incerteza entre {fmt_int(m['inferior'])} e {fmt_int(m['superior'])} km².")
++    if m.get("estabilizacao"):
++        texto += f" O modelo indica estabilização a partir de {m['estabilizacao']}."
++    return texto
++
++
++TEMPLATES = {
++    "VISAO_GERAL": texto_visao_geral,
++    "CORRELACAO_CLIMATICA": texto_correlacao,
++    "PROJECAO_TENDENCIA": texto_projecao,
++}
++
++_NUMEROS = re.compile(r"\d+(?:[.,]\d+)*")
++
++
++def _numeros(texto):
++    return {n.rstrip(".,") for n in _NUMEROS.findall(texto)}
++
++
++def validar_numeros(original, reescrito) -> bool:
++    """True se o texto reescrito não traz número que não estivesse no original."""
++    return _numeros(reescrito) <= _numeros(original)
++
++
++def gerar_texto(tela, metricas, reescritor=None):
++    """Devolve (texto, usou_llm)."""
++    base = TEMPLATES[tela](metricas)
++    if reescritor is None:
++        return base, False
++    try:
++        novo = reescritor(base)
++    except Exception as erro:  # qualquer falha do LLM cai no template
++        print(f"  [insights] LLM falhou ({erro}); usando o template.")
++        return base, False
++    novo = (novo or "").strip()
++    if novo and len(novo) <= 700 and validar_numeros(base, novo):
++        return novo, True
++    if novo:
++        print("  [insights] texto do LLM descartado (números diferentes do cálculo); usando o template.")
++    return base, False
++
++
++def criar_reescritor_gemini(api_key, modelo):
++    """Reescritor que chama o Gemini. Importa o SDK só se for usado."""
++    from google import genai
++
++    cliente = genai.Client(api_key=api_key)
++
++    def reescrever(texto):
++        resposta = cliente.models.generate_content(
++            model=modelo, contents=PROMPT_REESCRITA.format(texto=texto))
++        return resposta.text
++
++    return reescrever
+diff --git a/etl/requirements.txt b/etl/requirements.txt
+index 4996b45..02ca340 100644
+--- a/etl/requirements.txt
++++ b/etl/requirements.txt
+@@ -1,5 +1,8 @@
+ pandas==2.2.3
+ scikit-learn==1.6.0
++scipy==1.15.1
+ psycopg2-binary==2.9.10
+ openpyxl==3.1.5
+ python-dotenv==1.0.1
++# Opcional: só é usado se GEMINI_API_KEY e GEMINI_MODEL estiverem definidos
++google-genai>=1.0
+diff --git a/etl/run.py b/etl/run.py
+index 81a37cd..1fa71f5 100644
+--- a/etl/run.py
++++ b/etl/run.py
+@@ -1,7 +1,10 @@
+-"""Pipeline de dados (RF01, RF09, RF15). Rode com: docker compose run --rm etl
++"""Pipeline de dados (RF01, RF09, RF15, RF18). Rode com: docker compose run --rm etl
+ 
+ Para uma fonte só:
+     docker compose run --rm etl python run.py --fontes prodes
++
++Só recalcular o Brasil, a projeção e os textos (sem reler os arquivos):
++    docker compose run --rm etl python run.py --fontes agregados,projecao,insights
+ """
+ from pipeline.run_etl import main
+ 
+diff --git a/pytest.ini b/pytest.ini
+new file mode 100644
+index 0000000..f50d466
+--- /dev/null
++++ b/pytest.ini
+@@ -0,0 +1,5 @@
++[pytest]
++testpaths = tests
++pythonpath = backend etl
++filterwarnings =
++    ignore::DeprecationWarning
+diff --git a/tests/__init__.py b/tests/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/tests/conftest.py b/tests/conftest.py
+new file mode 100644
+index 0000000..1bbcd97
+--- /dev/null
++++ b/tests/conftest.py
+@@ -0,0 +1,48 @@
++"""Testes de ponta a ponta: schema real do projeto em um PostgreSQL de teste.
++
++Defina TEST_DATABASE_URL apontando para um servidor PostgreSQL (o banco informado na URL
++é APAGADO e recriado a cada execução). Exemplo com o docker compose do projeto:
++
++    TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ecomonitor_test pytest
++"""
++import os
++from pathlib import Path
++
++import psycopg2
++import pytest
++from psycopg2.extensions import make_dsn, parse_dsn
++
++RAIZ = Path(__file__).resolve().parents[1]
++TEST_URL = os.getenv("TEST_DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ecomonitor_test")
++TABELAS = "localidade, desmatamento_anual, dado_climatico, projecao, insight, status_sistema"
++
++
++@pytest.fixture(scope="session")
++def banco():
++    dsn = parse_dsn(TEST_URL)
++    nome = dsn["dbname"]
++    admin = psycopg2.connect(make_dsn(**{**dsn, "dbname": "postgres"}))
++    admin.autocommit = True
++    with admin.cursor() as cur:
++        cur.execute(f'DROP DATABASE IF EXISTS "{nome}" WITH (FORCE)')
++        cur.execute(f'CREATE DATABASE "{nome}"')
++    admin.close()
++
++    conn = psycopg2.connect(TEST_URL)
++    conn.autocommit = True
++    with conn.cursor() as cur:
++        cur.execute((RAIZ / "database" / "schema.sql").read_text(encoding="utf-8"))
++    conn.close()
++
++    os.environ["DATABASE_URL"] = TEST_URL  # usado pelo backend
++    return TEST_URL
++
++
++@pytest.fixture
++def conn(banco):
++    c = psycopg2.connect(banco)
++    with c.cursor() as cur:
++        cur.execute(f"TRUNCATE {TABELAS} RESTART IDENTITY CASCADE")
++    c.commit()
++    yield c
++    c.close()
+diff --git a/tests/dados_teste.py b/tests/dados_teste.py
+new file mode 100644
+index 0000000..902c4a0
+--- /dev/null
++++ b/tests/dados_teste.py
+@@ -0,0 +1,66 @@
++"""Gera arquivos de entrada no MESMO formato que o ETL lê (PRODES/MapBiomas em CSV e
++estações do INMET no layout do BDMEP), com valores sintéticos e determinísticos."""
++from datetime import date, timedelta
++from pathlib import Path
++
++ANOS = range(2004, 2024)
++
++# sigla -> (nome, base km²/ano). Só estes estados têm dado.
++ESTADOS = {"AM": ("Amazonas", 1500), "PA": ("Pará", 4000), "MT": ("Mato Grosso", 2500),
++           "GO": ("Goiás", 600), "SP": ("São Paulo", 80), "BA": ("Bahia", 700)}
++BIOMAS = {"Amazônia": 9000, "Caatinga": 700, "Cerrado": 6000,
++          "Mata Atlântica": 300, "Pampa": 60, "Pantanal": 150}
++# estação INMET -> (UF, bioma)
++ESTACOES = {"A001": ("AM", "Amazônia"), "A002": ("PA", "Amazônia"), "A003": ("MT", "Cerrado"),
++            "A004": ("GO", "Cerrado"), "A005": ("SP", "Mata Atlântica"), "A006": ("BA", "Caatinga")}
++
++
++def valor_prodes(base, ano, k):
++    """Série decrescente com oscilação, sempre positiva."""
++    return round(base * (1.6 - 0.04 * (ano - 2004) + 0.05 * ((ano * 7 + k * 3) % 5)), 1)
++
++
++def _csv(caminho: Path, cabecalho, linhas):
++    caminho.parent.mkdir(parents=True, exist_ok=True)
++    caminho.write_text("\n".join([cabecalho, *linhas]) + "\n", encoding="utf-8")
++
++
++def _estacao(uf, codigo, k):
++    linhas = ["REGIÃO:;N", f"UF:;{uf}", f"ESTAÇÃO:;ESTACAO {codigo}", f"CODIGO (WMO):;{codigo}",
++              "LATITUDE:;-3,1", "LONGITUDE:;-60,0", "ALTITUDE:;50", "DATA DE FUNDAÇÃO:;01/01/2000",
++              "Data;Hora UTC;PRECIPITAÇÃO TOTAL, HORÁRIO (mm);TEMPERATURA DO AR - BULBO SECO, HORARIA (°C);"]
++    dia = date(2003, 8, 1)  # o ETL usa o ano PRODES (agosto a julho)
++    while dia <= date(2023, 7, 31):
++        prec = (1 + ((dia.toordinal() * 13 + k) % 9)) * 0.7
++        temp = 24 + k * 0.3 + 0.05 * (dia.year - 2003) + ((dia.toordinal() + k) % 7) * 0.2
++        prec_txt = "-9999" if dia.toordinal() % 50 == 0 else f"{prec:.1f}".replace(".", ",")
++        temp_txt = f"{temp:.1f}".replace(".", ",")
++        linhas.append(f"{dia:%Y/%m/%d};0000 UTC;{prec_txt};{temp_txt};")
++        dia += timedelta(days=1)
++    return "\n".join(linhas) + "\n"
++
++
++def criar_dados(raiz: Path):
++    """Cria data/raw/... em `raiz` e devolve os valores esperados para conferência."""
++    prodes = raiz / "raw" / "prodes"
++    mapbiomas = raiz / "raw" / "mapbiomas"
++    inmet = raiz / "raw" / "inmet"
++
++    estados = {sigla: [valor_prodes(base, a, k) for a in ANOS] for k, (sigla, (_, base)) in enumerate(ESTADOS.items())}
++    biomas = {nome: [valor_prodes(base, a, k) for a in ANOS] for k, (nome, base) in enumerate(BIOMAS.items())}
++
++    _csv(prodes / "prodes_estados.csv", "estado,ano,area_km2",
++         [f"{sigla},{a},{v}" for sigla, vals in estados.items() for a, v in zip(ANOS, vals)])
++    _csv(prodes / "prodes_biomas.csv", "bioma,ano,area_km2",
++         [f"{nome},{a},{v}" for nome, vals in biomas.items() for a, v in zip(ANOS, vals)])
++
++    # MapBiomas (em hectares): Pará (também tem PRODES, que deve prevalecer) e Acre (só MapBiomas)
++    _csv(mapbiomas / "mapbiomas_estados.csv", "estado,ano,area_ha",
++         [f"{uf},{a},{10000 + 100 * (a - 2004)}" for uf in ("PA", "AC") for a in ANOS])
++
++    inmet.mkdir(parents=True, exist_ok=True)
++    for k, (codigo, (uf, _)) in enumerate(ESTACOES.items()):
++        (inmet / f"INMET_{uf}_{codigo}.CSV").write_bytes(_estacao(uf, codigo, k).encode("latin-1"))
++    _csv(inmet / "estacoes_bioma.csv", "codigo,bioma", [f"{c},{b}" for c, (_, b) in ESTACOES.items()])
++
++    return {"estados": estados, "biomas": biomas}
+diff --git a/tests/test_contrato_frontend.py b/tests/test_contrato_frontend.py
+new file mode 100644
+index 0000000..e9d5ad6
+--- /dev/null
++++ b/tests/test_contrato_frontend.py
+@@ -0,0 +1,41 @@
++"""Garante que a API devolve a MESMA estrutura dos mocks do frontend (ecomonitor-frontend/src/mocks),
++isto é, que o frontend funciona trocando VITE_USE_MOCK=false sem ajustes."""
++import json
++
++import pytest
++
++from tests.conftest import RAIZ
++from tests.test_integracao import cliente, esperado, id_de  # noqa: F401  (fixtures)
++
++MOCKS = RAIZ / "ecomonitor-frontend" / "src" / "mocks"
++
++
++def carregar(nome):
++    return json.loads((MOCKS / nome).read_text(encoding="utf-8"))
++
++
++def comparar(api, mock, caminho="$"):
++    """Mesmas chaves em todos os níveis; null em qualquer um dos lados é aceito."""
++    if api is None or mock is None:
++        return
++    assert type(api) is type(mock) or {type(api), type(mock)} <= {int, float}, f"{caminho}: tipos diferentes"
++    if isinstance(mock, dict):
++        assert set(api) == set(mock), f"{caminho}: chaves diferentes: {sorted(set(api) ^ set(mock))}"
++        for chave in mock:
++            comparar(api[chave], mock[chave], f"{caminho}.{chave}")
++    elif isinstance(mock, list) and mock and api:
++        comparar(api[0], mock[0], f"{caminho}[0]")
++
++
++@pytest.mark.parametrize("arquivo, rota", [
++    ("overview.json", "/api/v1/overview"),
++    ("climate-correlation.json", "/api/v1/climate-correlation"),
++    ("localidades.json", "/api/v1/localidades"),
++])
++def test_estrutura_igual_aos_mocks(cliente, arquivo, rota):  # noqa: F811
++    comparar(cliente.get(rota).json(), carregar(arquivo))
++
++
++def test_estrutura_da_projecao_igual_ao_mock(cliente):  # noqa: F811
++    estado = id_de(cliente, nome="Pará")
++    comparar(cliente.get(f"/api/v1/projection?localidade={estado}").json(), carregar("projection.json"))
+diff --git a/tests/test_integracao.py b/tests/test_integracao.py
+new file mode 100644
+index 0000000..80b13f7
+--- /dev/null
++++ b/tests/test_integracao.py
+@@ -0,0 +1,259 @@
++"""Pipeline completo (arquivos -> ETL -> PostgreSQL) e depois a API lendo o banco."""
++import json
++import os
++import sys
++
++import pytest
++from fastapi.testclient import TestClient
++
++from pipeline import config, insights, run_etl, textos
++from tests.dados_teste import ANOS, BIOMAS, ESTADOS, criar_dados
++
++
++@pytest.fixture
++def esperado(conn, tmp_path, monkeypatch):
++    """Carrega arquivos de teste, roda o ETL de verdade e devolve os valores esperados."""
++    dados = criar_dados(tmp_path)
++    raw = tmp_path / "raw"
++    monkeypatch.setattr(config, "DATABASE_URL", os.environ["DATABASE_URL"])
++    monkeypatch.setattr(config, "PRODES_ESTADOS", raw / "prodes" / "prodes_estados.csv")
++    monkeypatch.setattr(config, "PRODES_BIOMAS", raw / "prodes" / "prodes_biomas.csv")
++    monkeypatch.setattr(config, "MAPBIOMAS_ESTADOS", raw / "mapbiomas" / "mapbiomas_estados.csv")
++    monkeypatch.setattr(config, "MAPBIOMAS_BIOMAS", raw / "mapbiomas" / "mapbiomas_biomas.csv")
++    monkeypatch.setattr(config, "INMET_DIR", raw / "inmet")
++    monkeypatch.setattr(config, "INMET_ESTACOES_BIOMA", raw / "inmet" / "estacoes_bioma.csv")
++    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path / "processed")
++    monkeypatch.setattr(config, "CLIMA_COBERTURA_MIN", 0.01)  # os arquivos de teste são diários
++    monkeypatch.setattr(config, "MIN_ESTADOS_BRASIL", 5)
++    monkeypatch.setattr(config, "GEMINI_API_KEY", None)
++
++    monkeypatch.setattr(sys, "argv", ["run_etl", "--sem-llm"])
++    with pytest.raises(SystemExit) as saida:
++        run_etl.main()
++    assert saida.value.code in (0, None)
++    return dados
++
++
++@pytest.fixture
++def cliente(esperado):
++    from app.main import app
++    return TestClient(app)
++
++
++def id_de(cliente, **filtro):
++    return next(l["id"] for l in cliente.get("/api/v1/localidades").json()
++                if all(l[k] == v for k, v in filtro.items()))
++
++
++def soma_biomas(esperado, i):
++    return round(sum(v[i] for v in esperado["biomas"].values()), 4)
++
++
++# ---------------------------------------------------------------- dados no banco
++def test_brasil_e_a_soma_dos_biomas_e_nao_dos_estados(conn, esperado):
++    with conn.cursor() as cur:
++        cur.execute("SELECT d.ano, d.area_km2 FROM desmatamento_anual d JOIN localidade l ON l.id=d.localidade_id "
++                    "WHERE l.tipo='PAIS' AND d.fonte='PRODES' ORDER BY d.ano")
++        brasil = cur.fetchall()
++    assert [a for a, _ in brasil] == list(ANOS)
++    for i, (_, area) in enumerate(brasil):
++        assert area == pytest.approx(soma_biomas(esperado, i), rel=1e-6)
++
++
++def test_clima_do_brasil_so_existe_com_estados_suficientes(conn, esperado):
++    with conn.cursor() as cur:
++        cur.execute("SELECT count(*) FROM dado_climatico c JOIN localidade l ON l.id=c.localidade_id WHERE l.tipo='PAIS'")
++        assert cur.fetchone()[0] == len(ANOS)  # 6 estados >= MIN_ESTADOS_BRASIL (5)
++        cur.execute("SELECT count(DISTINCT l.nome) FROM dado_climatico c JOIN localidade l ON l.id=c.localidade_id WHERE l.tipo='BIOMA'")
++        assert cur.fetchone()[0] == 4  # biomas com estação: Amazônia, Cerrado, Mata Atlântica, Caatinga
++
++
++def test_projecao_e_insights_gerados_para_todas_as_localidades_com_dado(conn, esperado):
++    with conn.cursor() as cur:
++        cur.execute("SELECT count(DISTINCT localidade_id), count(*) FROM projecao")
++        n_loc, n_linhas = cur.fetchone()
++        cur.execute("SELECT count(DISTINCT localidade_id) FROM desmatamento_anual")
++        assert n_loc == cur.fetchone()[0]
++        assert n_linhas == n_loc * config.ANOS_PROJECAO
++        cur.execute("SELECT tela, count(*) FROM insight GROUP BY tela")
++        telas = dict(cur.fetchall())
++    assert set(telas) == {"VISAO_GERAL", "CORRELACAO_CLIMATICA", "PROJECAO_TENDENCIA"}
++    assert telas["VISAO_GERAL"] == telas["PROJECAO_TENDENCIA"] == n_loc
++    assert telas["CORRELACAO_CLIMATICA"] < n_loc  # sem clima em alguns estados/biomas
++
++
++def test_metricas_de_validacao_do_modelo_foram_salvas(esperado):
++    caminho = config.PROCESSED_DIR / "metricas_modelo.json"
++    dados = json.loads(caminho.read_text(encoding="utf-8"))
++    assert "Brasil" in dados["localidades"] and dados["localidades"]["Brasil"]["n_teste"] == 3
++    assert dados["localidades"]["Brasil"]["mae"] is not None
++
++
++def test_etl_pode_rodar_de_novo_sem_duplicar(conn, esperado, monkeypatch):
++    def contagens():
++        with conn.cursor() as cur:
++            cur.execute("SELECT (SELECT count(*) FROM desmatamento_anual), (SELECT count(*) FROM dado_climatico),"
++                        "(SELECT count(*) FROM projecao), (SELECT count(*) FROM insight), (SELECT count(*) FROM localidade)")
++            return cur.fetchone()
++    conn.commit()
++    antes = contagens()
++    monkeypatch.setattr(sys, "argv", ["run_etl", "--sem-llm"])
++    with pytest.raises(SystemExit):
++        run_etl.main()
++    conn.commit()
++    assert contagens() == antes
++
++
++def test_status_do_sistema_registra_sucesso(conn, esperado):
++    with conn.cursor() as cur:
++        cur.execute("SELECT status_ultima_execucao, ultima_atualizacao_sucesso FROM status_sistema WHERE id = 1")
++        status, momento = cur.fetchone()
++    assert status == "SUCESSO" and momento is not None
++
++
++# ---------------------------------------------------------------- API
++def test_localidades(cliente):
++    r = cliente.get("/api/v1/localidades")
++    assert r.status_code == 200
++    lista = r.json()
++    assert len(lista) == 27 + 6 + 1
++    assert lista[0] == {"id": lista[0]["id"], "nome": "Brasil", "sigla_uf": None, "tipo": "PAIS", "regiao": None}
++    assert {l["tipo"] for l in lista} == {"PAIS", "ESTADO", "BIOMA"}
++    assert [l["tipo"] for l in lista] == sorted((l["tipo"] for l in lista), key=["PAIS", "ESTADO", "BIOMA"].index)
++
++
++def test_overview_do_brasil(cliente, esperado):
++    r = cliente.get("/api/v1/overview")
++    assert r.status_code == 200
++    d = r.json()
++    ultimo = len(ANOS) - 1
++    kpi = d["kpis"][0]
++    assert kpi["region"] == "BR" and kpi["ano_referencia"] == 2023
++    assert kpi["area_desmatada_km2"] == pytest.approx(soma_biomas(esperado, ultimo), rel=1e-6)
++    anterior = soma_biomas(esperado, ultimo - 1)
++    assert kpi["variacao_percentual"] == pytest.approx((kpi["area_desmatada_km2"] - anterior) / anterior * 100, rel=1e-6)
++    maior = max(BIOMAS, key=lambda b: esperado["biomas"][b][ultimo])
++    assert d["bioma_critico"] == maior
++    assert [p["ano"] for p in d["serie_historica"]] == list(ANOS)
++    assert d["insight"].startswith("Brasil: a área desmatada em 2023 foi de ")
++    assert d["atualizado_em"] is not None and d["atualizado_em"].endswith(("Z", "+00:00"))
++
++
++def test_overview_de_um_estado_e_periodo(cliente, esperado):
++    pa = id_de(cliente, nome="Pará")
++    d = cliente.get(f"/api/v1/overview?localidade={pa}&ano_inicio=2018&ano_fim=2021").json()
++    assert d["kpis"][0]["region"] == "PA" and d["kpis"][0]["ano_referencia"] == 2021
++    assert [p["ano"] for p in d["serie_historica"]] == [2018, 2019, 2020, 2021]
++    i = list(ANOS).index(2021)
++    # o Pará tem PRODES e MapBiomas: a API usa o PRODES
++    assert d["kpis"][0]["area_desmatada_km2"] == pytest.approx(esperado["estados"]["PA"][i])
++
++
++def test_overview_de_bioma_usa_o_nome_como_regiao(cliente):
++    d = cliente.get(f"/api/v1/overview?localidade={id_de(cliente, nome='Cerrado')}").json()
++    assert d["kpis"][0]["region"] == "Cerrado"
++
++
++def test_localidade_so_com_mapbiomas_usa_mapbiomas_em_km2(cliente):
++    ac = id_de(cliente, nome="Acre")
++    d = cliente.get(f"/api/v1/overview?localidade={ac}&ano_inicio=2004&ano_fim=2004").json()
++    assert d["kpis"][0]["area_desmatada_km2"] == pytest.approx(100.0)  # 10.000 ha = 100 km²
++
++
++def test_erros_do_overview(cliente):
++    assert cliente.get("/api/v1/overview?localidade=99999").status_code == 404
++    assert cliente.get("/api/v1/overview?ano_inicio=2020&ano_fim=2010").status_code == 422
++    assert cliente.get("/api/v1/overview?ano_inicio=2090&ano_fim=2095").status_code == 404
++    sem_dado = id_de(cliente, nome="Roraima")
++    r = cliente.get(f"/api/v1/overview?localidade={sem_dado}")
++    assert r.status_code == 404 and "Roraima" in r.json()["detail"]
++
++
++def test_climate_correlation(cliente, esperado):
++    d = cliente.get("/api/v1/climate-correlation").json()
++    assert [p["ano"] for p in d["serie"]] == list(ANOS)
++    ind = d["indicadores"]
++    assert -1 <= ind["coef_correlacao_temperatura"] <= 1 and -1 <= ind["coef_correlacao_precipitacao"] <= 1
++    temps = [p["temperatura_media_c"] for p in d["serie"]]
++    assert ind["anomalia_termica_c"] == pytest.approx(temps[-1] - sum(temps) / len(temps))
++    assert all(15 < t < 35 and p["precipitacao_mm"] > 0 for t, p in zip(temps, d["serie"]))
++    assert d["insight"].startswith("Brasil: entre 2004 e 2023")
++    # estado e bioma com estação
++    for nome in ("Pará", "Cerrado"):
++        assert cliente.get(f"/api/v1/climate-correlation?localidade={id_de(cliente, nome=nome)}").status_code == 200
++
++
++def test_climate_correlation_sem_estacao_e_periodo(cliente):
++    sem_clima = id_de(cliente, nome="Pampa")  # sem estação mapeada
++    assert cliente.get(f"/api/v1/climate-correlation?localidade={sem_clima}").status_code == 404
++    d = cliente.get("/api/v1/climate-correlation?ano_inicio=2015&ano_fim=2019").json()
++    assert [p["ano"] for p in d["serie"]] == [2015, 2016, 2017, 2018, 2019]
++
++
++def test_projection_geral_e_regional(cliente, esperado):
++    d = cliente.get("/api/v1/projection").json()
++    assert d["regional"] is None
++    g = d["geral"]
++    assert [p["ano"] for p in g["projecao"]] == list(range(2024, 2031))
++    assert [p["ano"] for p in g["serie_historica"]] == list(range(2018, 2024))
++    for p in g["projecao"]:
++        assert 0 <= p["intervalo_inferior"] <= p["valor_projetado_km2"] <= p["intervalo_superior"]
++    assert g["insight"].startswith("Brasil: se a tendência atual continuar")
++
++    pa = id_de(cliente, nome="Pará")
++    r = cliente.get(f"/api/v1/projection?localidade={pa}&horizonte=3").json()
++    assert len(r["regional"]["projecao"]) == 3 and len(r["geral"]["projecao"]) == 3
++    assert r["regional"]["insight"].startswith("Pará: ")
++    brasil = id_de(cliente, tipo="PAIS")
++    assert cliente.get(f"/api/v1/projection?localidade={brasil}").json()["regional"] is None
++
++
++def test_projection_erros(cliente):
++    assert cliente.get("/api/v1/projection?localidade=99999").status_code == 404
++    assert cliente.get("/api/v1/projection?horizonte=0").status_code == 422
++    assert cliente.get(f"/api/v1/projection?localidade={id_de(cliente, nome='Roraima')}").status_code == 404
++
++
++def test_projecao_tem_a_tendencia_dos_dados(cliente):
++    """Séries do teste caem ~4%/ano da base: a projeção deve continuar caindo."""
++    g = cliente.get("/api/v1/projection").json()["geral"]
++    assert g["projecao"][-1]["valor_projetado_km2"] < g["serie_historica"][0]["area_km2"]
++
++
++def test_health(cliente):
++    assert cliente.get("/api/v1/health").json() == {"status": "ok"}
++
++
++# ---------------------------------------------------------------- LLM (opcional)
++def test_insights_com_llm_aceitam_so_texto_fiel(conn, esperado, monkeypatch):
++    chamadas = []
++
++    def falso_gemini(api_key, modelo):
++        def reescrever(texto):
++            chamadas.append(texto)
++            # devolve o mesmo texto com uma pequena mudança de estilo (mesmos números)
++            return texto.replace("a área desmatada", "o desmatamento")
++        return reescrever
++
++    monkeypatch.setattr(config, "GEMINI_API_KEY", "chave")
++    monkeypatch.setattr(config, "GEMINI_MODEL", "modelo-x")
++    monkeypatch.setattr(config, "USAR_LLM", True)
++    monkeypatch.setattr(textos, "criar_reescritor_gemini", falso_gemini)
++    n = insights.executar(conn)
++    conn.commit()
++    assert len(chamadas) == n
++    with conn.cursor() as cur:
++        cur.execute("SELECT texto_gerado FROM insight WHERE tela='VISAO_GERAL' LIMIT 1")
++        assert "o desmatamento em 2023" in cur.fetchone()[0]
++
++
++def test_llm_que_inventa_numero_e_ignorado_e_sem_chave_usa_template(conn, esperado, monkeypatch):
++    monkeypatch.setattr(config, "GEMINI_API_KEY", "chave")
++    monkeypatch.setattr(config, "GEMINI_MODEL", "modelo-x")
++    monkeypatch.setattr(config, "USAR_LLM", True)
++    monkeypatch.setattr(textos, "criar_reescritor_gemini", lambda k, m: (lambda t: "O desmatamento caiu 987654% em 2023."))
++    insights.executar(conn)
++    conn.commit()
++    with conn.cursor() as cur:
++        cur.execute("SELECT count(*) FROM insight WHERE texto_gerado LIKE '%987654%'")
++        assert cur.fetchone()[0] == 0
+diff --git a/tests/test_modelo.py b/tests/test_modelo.py
+new file mode 100644
+index 0000000..8fcc63e
+--- /dev/null
++++ b/tests/test_modelo.py
+@@ -0,0 +1,62 @@
++import pytest
++
++from pipeline import modelo
++
++
++def test_reta_perfeita_e_projetada_exatamente():
++    anos = list(range(2010, 2020))
++    valores = [100 + 10 * (a - 2010) for a in anos]
++    pontos = modelo.projetar(anos, valores, horizonte=3)
++    assert [p.ano for p in pontos] == [2020, 2021, 2022]
++    assert [round(p.valor) for p in pontos] == [200, 210, 220]
++    # sem ruído, não há incerteza
++    assert all(p.inferior == pytest.approx(p.valor) and p.superior == pytest.approx(p.valor) for p in pontos)
++
++
++def test_intervalo_contem_o_valor_e_abre_com_o_horizonte():
++    anos = list(range(2005, 2024))
++    valores = [5000 - 120 * (a - 2005) + (400 if a % 3 == 0 else -250) for a in anos]
++    pontos = modelo.projetar(anos, valores, horizonte=7)
++    for p in pontos:
++        assert 0 <= p.inferior <= p.valor <= p.superior
++    larguras = [p.superior - p.inferior for p in pontos]
++    assert larguras == sorted(larguras) and larguras[-1] > larguras[0]
++
++
++def test_projecao_nunca_e_negativa():
++    anos = list(range(2010, 2020))
++    valores = [100 - 12 * (a - 2010) for a in anos]  # cai abaixo de zero em ~2018
++    pontos = modelo.projetar(anos, valores, horizonte=5)
++    assert all(p.valor >= 0 and p.inferior >= 0 for p in pontos)
++    assert pontos[-1].valor == 0
++
++
++def test_janela_usa_so_os_ultimos_anos():
++    anos = list(range(2000, 2020))
++    valores = [1000] * 10 + [100 + 10 * (a - 2010) for a in range(2010, 2020)]
++    pontos = modelo.projetar(anos, valores, horizonte=1, janela=10)
++    assert round(pontos[0].valor) == 200  # ignora o patamar antigo de 1000
++
++
++def test_exige_ao_menos_tres_anos():
++    with pytest.raises(ValueError):
++        modelo.projetar([2022, 2023], [10, 11], horizonte=2)
++
++
++def test_avaliacao_de_reta_perfeita_tem_erro_zero():
++    anos = list(range(2005, 2024))
++    valores = [200 + 5 * (a - 2005) for a in anos]
++    m = modelo.avaliar(anos, valores)
++    assert m["n_teste"] == 3
++    assert m["mae"] == pytest.approx(0, abs=1e-6) and m["rmse"] == pytest.approx(0, abs=1e-6)
++
++
++def test_avaliacao_sem_historico_suficiente():
++    assert modelo.avaliar([2020, 2021, 2022], [1, 2, 3])["n_teste"] == 0
++
++
++def test_ponto_de_estabilizacao():
++    # variações de -10%, -5%, -0,5%: estabiliza no 3º ano projetado
++    proj = [(2024, 90.0), (2025, 85.5), (2026, 85.0725), (2027, 80.0)]
++    assert modelo.ponto_estabilizacao(100.0, proj) == 2026
++    assert modelo.ponto_estabilizacao(100.0, [(2024, 90.0), (2025, 80.0)]) is None
+diff --git a/tests/test_textos.py b/tests/test_textos.py
+new file mode 100644
+index 0000000..134b943
+--- /dev/null
++++ b/tests/test_textos.py
+@@ -0,0 +1,76 @@
++from pipeline import estatistica, textos
++from app.services import indicadores
++
++
++def metricas_visao():
++    return {"nome": "Pará", "ano_inicial": 2004, "ano": 2023, "area_km2": 3272.4,
++            "ano_anterior": 2022, "area_anterior": 4141.0, "variacao_pct": -20.98,
++            "ano_min": 2012, "area_min": 1741.0, "ano_max": 2004, "area_max": 8870.0}
++
++
++def test_formatacao_ptbr():
++    assert textos.fmt_int(9001) == "9.001"
++    assert textos.fmt_int(1234567.4) == "1.234.567"
++    assert textos.fmt_dec(22.44) == "22,4"
++    assert textos.fmt_dec(0.5, 2) == "0,50"
++
++
++def test_texto_visao_geral_traz_so_numeros_do_calculo():
++    t = textos.texto_visao_geral(metricas_visao())
++    assert t.startswith("Pará: a área desmatada em 2023 foi de 3.272 km²")
++    assert "uma queda de 21,0% em relação a 2022 (4.141 km²)" in t
++    assert "o menor valor foi em 2012 (1.741 km²) e o maior em 2004 (8.870 km²)" in t
++
++
++def test_texto_visao_geral_sem_ano_anterior_ou_estavel():
++    m = metricas_visao() | {"ano_anterior": None, "area_anterior": None, "variacao_pct": None}
++    assert "queda" not in textos.texto_visao_geral(m)
++    m = metricas_visao() | {"variacao_pct": 0.0}
++    assert "praticamente igual a 2022" in textos.texto_visao_geral(m)
++
++
++def test_texto_correlacao_e_projecao():
++    c = textos.texto_correlacao({"nome": "Brasil", "ano_inicial": 2014, "ano_final": 2023, "r_temp": -0.07,
++                                 "r_prec": None, "anomalia_c": 0.64, "deficit_mm": -276.3})
++    assert "foi de -0,07" in c and "não pôde ser calculada" in c
++    assert "0,6 °C acima" in c and "276 mm abaixo" in c
++    p = textos.texto_projecao({"nome": "Brasil", "ano_base": 2023, "base_km2": 9001, "ano_final": 2030,
++                               "final_km2": 7300, "inferior": 4100, "superior": 10500,
++                               "variacao_pct": -18.9, "estabilizacao": 2028})
++    assert "cerca de 7.300 km² em 2030, uma queda de 18,9% em relação a 2023 (9.001 km²)" in p
++    assert "margem de incerteza entre 4.100 e 10.500 km²" in p and "estabilização a partir de 2028" in p
++
++
++def test_llm_so_e_aceito_se_nao_inventar_numeros():
++    m = metricas_visao()
++    base = textos.texto_visao_geral(m)
++    # reescrita fiel (mesmos números): aceita
++    fiel, usou = textos.gerar_texto("VISAO_GERAL", m, lambda t: "Em 2023 o Pará perdeu 3.272 km² de floresta, 21,0% a menos que em 2022 (4.141 km²).")
++    assert usou and fiel.startswith("Em 2023")
++    # número novo (inventado): descartado, volta ao template
++    inventado, usou = textos.gerar_texto("VISAO_GERAL", m, lambda t: "O desmatamento caiu 35% em 2023.")
++    assert not usou and inventado == base
++    # LLM fora do ar: volta ao template
++    def quebra(_):
++        raise RuntimeError("cota excedida")
++    assert textos.gerar_texto("VISAO_GERAL", m, quebra) == (base, False)
++    # resposta vazia
++    assert textos.gerar_texto("VISAO_GERAL", m, lambda t: None) == (base, False)
++
++
++def test_indicadores_da_api_e_do_etl_sao_iguais():
++    x = [5012, 6207, 7893, 6947, 7536, 10129, 10851, 13038, 11594, 9001]
++    y = [26.3, 26.9, 27.1, 26.5, 26.4, 26.7, 26.6, 26.4, 26.5, 27.3]
++    assert indicadores.correlacao(x, y) == estatistica.correlacao(x, y)
++    assert indicadores.taxa_supressao_pct(x) == estatistica.taxa_supressao_pct(x)
++    assert indicadores.desvio_da_media(y) == estatistica.desvio_da_media(y)
++    assert indicadores.variacao_percentual(9001, 11594) == estatistica.variacao_percentual(9001, 11594)
++
++
++def test_indicadores_casos_limite():
++    assert indicadores.correlacao([1, 2], [1, 2]) is None            # poucos pontos
++    assert indicadores.correlacao([1, 1, 1], [1, 2, 3]) is None      # sem variação
++    assert indicadores.variacao_percentual(5, 0) is None and indicadores.variacao_percentual(5, None) is None
++    assert indicadores.taxa_supressao_pct([10]) is None
++    assert round(indicadores.taxa_supressao_pct([100, 110, 99]), 1) == 0.0  # +10% e -10%
++    assert indicadores.desvio_da_media([1, 2, 6]) == 3
