@@ -1,5 +1,5 @@
 {
-  "gerado_em": "2026-11-10T20:10:17.987461+00:00",
+  "gerado_em": "2026-11-22T20:28:56.113005+00:00",
   "modelo": "LinearRegression (scikit-learn) sobre o ano; intervalo de previsão de 95%",
   "janela_anos": 15,
   "anos_projetados": 7,
@@ -75,62 +75,6 @@
       "mae": 846.1936507936529,
       "rmse": 892.2466028697373,
       "r2": -7.602437762929922
-    },
-    "Amazônia": {
-      "fonte": "PRODES",
-      "ano_base": 2025,
-      "n_teste": 3,
-      "mae": 4463.8922539682535,
-      "rmse": 4641.582555654954,
-      "r2": -16.31245270434012
-    },
-    "Caatinga": {
-      "fonte": "PRODES",
-      "ano_base": 2025,
-      "n_teste": 3,
-      "mae": 1194.916698412718,
-      "rmse": 1410.2169058664288,
-      "r2": -6.777702002929371
-    },
-    "Cerrado": {
-      "fonte": "PRODES",
-      "ano_base": 2025,
-      "n_teste": 3,
-      "mae": 1657.5931111111229,
-      "rmse": 2133.838270555794,
-      "r2": -0.7667794880749961
-    },
-    "Mata Atlântica": {
-      "fonte": "PRODES",
-      "ano_base": 2025,
-      "n_teste": 3,
-      "mae": 200.32520634920448,
-      "rmse": 212.50848153831978,
-      "r2": -0.8388557248996213
-    },
-    "Pampa": {
-      "fonte": "PRODES",
-      "ano_base": 2025,
-      "n_teste": 3,
-      "mae": 339.56063492063544,
-      "rmse": 341.5140185906195,
-      "r2": -4.622122630748668
-    },
-    "Pantanal": {
-      "fonte": "PRODES",
-      "ano_base": 2025,
-      "n_teste": 3,
-      "mae": 215.26726984126904,
-      "rmse": 301.7337195156609,
-      "r2": -0.623696487561106
-    },
-    "Brasil": {
-      "fonte": "PRODES",
-      "ano_base": 2025,
-      "n_teste": 3,
-      "mae": 4834.083682539692,
-      "rmse": 5234.5840864678685,
-      "r2": -1.2736203598384521
     }
   }
 }
