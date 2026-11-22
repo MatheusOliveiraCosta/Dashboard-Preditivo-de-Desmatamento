@@ -16,13 +16,56 @@ tests/                 testes de ponta a ponta (ETL → banco → API)
 
 Contrato da API, regras dos dados e etapas do ETL: [`docs/arquitetura-contrato-api.md`](docs/arquitetura-contrato-api.md).
 
+## 📁 Como baixar os arquivos da `main` e rodar (Git LFS + Docker)
+
+Os arquivos `.zip` do INMET (`2024.zip`, `2025.zip` e `2026.zip`) estão versionados com **Git LFS**. Sem ele, o Git baixa apenas arquivos de texto pequenos (ponteiros) e o ETL falha ao tentar ler os dados.
+
+### 1. Instale e ative o Git LFS
+
+- **Windows:** baixe e instale em <https://git-lfs.com/> e reinicie o VS Code/terminal.
+- **Linux / GitHub Codespaces:**
+  ```bash
+  sudo apt-get update && sudo apt-get install -y git-lfs
+  ```
+- Em qualquer sistema, ative o Git LFS uma única vez:
+  ```bash
+  git lfs install
+  ```
+
+### 2. Baixe a `main` atualizada e puxe os `.zip` reais
+
+Na pasta raiz do projeto, execute:
+
+```bash
+git checkout main
+git pull origin main
+git lfs pull
+```
+
+> Confira em `data/raw/inmet/` se os arquivos `.zip` têm mais de 85 MB cada (e não apenas alguns bytes) e se `data/raw/prodes/prodes_estados.csv` está presente.
+
+*(Opcional — série histórica completa de 2004 a 2026: caso os 21 arquivos `.zip` estejam disponíveis na aba **Releases** do repositório, baixe-os e coloque todos dentro de `data/raw/inmet/` antes do próximo passo.)*
+
+### 3. Suba o banco no Docker e rode o ETL
+
+Como o GitHub não envia o banco de dados já preenchido, execute o ETL para carregar os arquivos no PostgreSQL local:
+
+```bash
+cp .env.example .env
+docker compose up -d db
+docker compose run --rm etl
+docker compose up -d
+```
+
+Verifique se os containers estão ativos com `docker compose ps` e acesse <http://localhost:8000/docs>.
+
 ## Rodando com dados reais
 
 1. `cp .env.example .env` (e ajuste as senhas, se quiser).
-2. Coloque os arquivos de entrada em `data/raw/` (a pasta não vai para o Git):
-   - `prodes/prodes_estados.csv` e `prodes/prodes_biomas.csv`
-   - `mapbiomas/mapbiomas_estados.csv` e `mapbiomas/mapbiomas_biomas.csv` (opcional)
-   - `inmet/` com os CSV das estações do BDMEP + `inmet/estacoes_bioma.csv`
+2. Coloque os arquivos de entrada em `data/raw/` (a pasta não vai para o Git por padrão):
+  - `prodes/prodes_estados.csv` e `prodes/prodes_biomas.csv`
+  - `mapbiomas/mapbiomas_estados.csv` e `mapbiomas/mapbiomas_biomas.csv` (opcional)
+  - `inmet/` com os CSV ou ZIP das estações do BDMEP + `inmet/estacoes_bioma.csv`
 
    Para o Brasil ficar completo, carregue os **6 biomas** do PRODES.
 3. Suba o banco e a API: `docker compose up -d db backend`
