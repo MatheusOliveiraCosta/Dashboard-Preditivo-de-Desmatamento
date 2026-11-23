@@ -9,6 +9,7 @@ import AppIcon from '@/components/icons/AppIcon.vue'
 import { useCorrelacaoClimatica } from '@/composables/useCorrelacaoClimatica'
 import { DINAMICA_CLIMATICA } from '@/content/dinamicaClimatica'
 import { useExportacaoStore } from '@/stores/exportacao'
+import FilterBar from '@/components/filters/FilterBar.vue'
 
 const { dados, serie, anoInicial, anoFinal, erro, carregando } = useCorrelacaoClimatica()
 const exportacao = useExportacaoStore()
@@ -80,6 +81,12 @@ onBeforeUnmount(() => exportacao.limpar())
         </button>
       </div>
     </header>
+
+    <FilterBar
+      :ano-inicial="anoInicial"
+      :ano-final="anoFinal"
+    />
+
 
     <div class="correlacao__grade" :aria-busy="carregando">
       <div class="correlacao__principal">
