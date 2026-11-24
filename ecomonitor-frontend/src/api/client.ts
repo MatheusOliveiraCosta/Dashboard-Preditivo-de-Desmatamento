@@ -11,6 +11,30 @@ export async function apiGet<T>(path: string, params: Record<string, unknown> = 
     if (valor !== undefined && valor !== null) url.searchParams.set(chave, String(valor))
   }
   const resposta = await fetch(url)
-  if (!resposta.ok) throw new Error(`Falha ao consultar ${path} (HTTP ${resposta.status})`)
+  
+if (!resposta.ok) {
+  if (resposta.status === 404) {
+    if (path.includes('/overview')) {
+      throw new Error(
+        'Não foi possível encontrar dados de desmatamento para ' +
+        'a localidade selecionada. Experimente outro estado ou bioma.'
+      )
+    }
+
+    if (path.includes('/climate-correlation')) {
+      throw new Error(
+        'Não existem dados climáticos suficientes para ' +
+        'a localidade selecionada.'
+      )
+    }
+
+    throw new Error('Os dados solicitados não foram encontrados.')
+  }
+
+  throw new Error(
+    `Não foi possível carregar os dados (HTTP ${resposta.status}).`
+  )
+}
+
   return (await resposta.json()) as T
 }
