@@ -31,6 +31,61 @@ const legenda: ItemLegenda[] = [
 ]
 
 const indicadores = computed(() => dados.value?.indicadores ?? null)
+
+
+const formatarGrafico = (valor: number) =>
+  new Intl.NumberFormat('pt-BR', {
+    maximumFractionDigits: 2,
+  }).format(valor)
+
+const barrasAnuais = computed(() => {
+  const ponto = serie.value[0]
+  if (!ponto) return []
+
+  const itens = [
+    {
+      nome: 'Desmatamento',
+      valor: ponto.area_km2,
+      unidade: 'km²',
+      cor: '#93000a',
+    },
+    {
+      nome: 'Temperatura média',
+      valor: ponto.temperatura_media_c,
+      unidade: '°C',
+      cor: '#b45309',
+    },
+    {
+      nome: 'Precipitação',
+      valor: ponto.precipitacao_mm,
+      unidade: 'mm',
+      cor: '#2d5a27',
+    },
+  ]
+
+  return itens.map((item) => {
+    const valor = Number.isFinite(item.valor)
+      ? Math.max(0, item.valor)
+      : 0
+
+    const grandeza = valor > 0
+      ? 10 ** Math.floor(Math.log10(valor))
+      : 1
+
+    const limite = valor > 0
+      ? Math.ceil(valor / grandeza) * grandeza
+      : 1
+
+    return {
+      ...item,
+      valor,
+      limite,
+      largura: (valor / limite) * 100,
+    }
+  })
+})
+
+
 const periodo = computed(() =>
   anoInicial.value === undefined ? '—' : `${anoInicial.value} - ${anoFinal.value}`,
 )
@@ -94,9 +149,67 @@ onBeforeUnmount(() => exportacao.limpar())
           <div class="correlacao__legenda">
             <LegendaGrafico :itens="legenda" />
           </div>
+
           <div class="correlacao__canvas">
-            <CorrelacaoChart :serie="serie" />
+
+            <!-- Gráfico original, quando existem vários anos -->
+            <CorrelacaoChart
+              v-if="serie.length >= 2"
+              :serie="serie"
+            />
+
+            <!-- Gráfico de barras para um único ano -->
+            <div
+              v-else-if="serie.length === 1"
+              class="correlacao__barras"
+            >
+              <h3>Indicadores ambientais — {{ serie[0]?.ano }}</h3>
+
+              <div
+                v-for="barra in barrasAnuais"
+                :key="barra.nome"
+                class="correlacao__barra"
+              >
+                <div class="correlacao__barra-titulo">
+                  <strong>{{ barra.nome }}</strong>
+                  <span>
+                    {{ formatarGrafico(barra.valor) }}
+                    {{ barra.unidade }}
+                  </span>
+                </div>
+
+                <div class="correlacao__trilho">
+                  <div
+                    class="correlacao__preenchimento"
+                    :style="{
+                      width: `${barra.largura}%`,
+                      backgroundColor: barra.cor,
+                    }"
+                  ></div>
+                </div>
+
+                <div class="correlacao__escala">
+                  <span>0</span>
+                  <span>
+                    {{ formatarGrafico(barra.limite) }}
+                    {{ barra.unidade }}
+                  </span>
+                </div>
+              </div>
+
+              <p class="correlacao__observacao">
+                Cada indicador utiliza uma escala própria.
+                Para visualizar a evolução temporal, são
+                necessários dados de mais de um ano.
+              </p>
+            </div>
+
+            <p v-else class="correlacao__sem-dados">
+              Nenhum dado disponível para os filtros selecionados.
+            </p>
+
           </div>
+
         </section>
 
         <section class="correlacao__indicadores" aria-label="Indicadores do período">
@@ -144,6 +257,72 @@ onBeforeUnmount(() => exportacao.limpar())
 </template>
 
 <style scoped>
+
+
+.correlacao__barras {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 24px;
+  height: 100%;
+  padding: 20px;
+}
+
+.correlacao__barras h3 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e3b1a;
+}
+
+.correlacao__barra {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.correlacao__barra-titulo,
+.correlacao__escala {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.correlacao__barra-titulo {
+  font-size: 15px;
+  color: #1e3b1a;
+}
+
+.correlacao__trilho {
+  height: 20px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #e1e4df;
+}
+
+.correlacao__preenchimento {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+
+.correlacao__escala {
+  color: #575f53;
+  font-size: 12px;
+}
+
+.correlacao__observacao,
+.correlacao__sem-dados {
+  color: #575f53;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.correlacao__sem-dados {
+  padding: 32px;
+  text-align: center;
+}
+
+
 .correlacao {
   display: flex;
   flex-direction: column;
