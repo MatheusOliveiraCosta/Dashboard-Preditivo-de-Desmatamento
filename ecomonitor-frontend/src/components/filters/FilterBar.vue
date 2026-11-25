@@ -14,11 +14,19 @@ const localidadeAtiva = computed(
   () => todas.value.find((l) => l.id === filtros.localidadeId)?.nome ?? 'Brasil',
 )
 
+
 const descricaoPeriodo = computed(() => {
-  if (filtros.periodo === '1ano') return 'último ano'
-  if (filtros.periodo === '5anos') return 'últimos 5 anos'
-  return 'histórico completo'
+  if (filtros.periodo === '1ano') {
+    return 'último ano disponível'
+  }
+
+  if (filtros.periodo === '5anos') {
+    return 'dados disponíveis dos últimos 5 anos'
+  }
+
+  return 'histórico disponível'
 })
+
 
 const intervalo = computed(() => {
   if (props.anoInicial === undefined || props.anoFinal === undefined) return ''
