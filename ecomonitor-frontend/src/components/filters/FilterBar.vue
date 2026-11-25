@@ -205,4 +205,39 @@ function aoMudar(evento: Event, tipo: 'estado' | 'bioma') {
 .filtros__descricao strong {
   color: var(--color-primary);
 }
+
+
+/* Transições dos filtros */
+.filtros__periodo,
+.filtros__select select {
+  transition:
+    background-color 200ms ease,
+    border-color 200ms ease,
+    box-shadow 200ms ease,
+    transform 150ms ease;
+}
+
+@media (hover: hover) {
+  .filtros__periodo:hover:not(.is-ativo) {
+    background-color: var(--color-surface);
+    border-color: var(--color-primary);
+  }
+
+  .filtros__select select:hover {
+    border-color: var(--color-primary);
+    box-shadow: 0 2px 8px rgba(21, 66, 18, 0.08);
+  }
+}
+
+.filtros__periodo:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filtros__periodo,
+  .filtros__select select {
+    transition: none;
+  }
+}
+
 </style>

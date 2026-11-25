@@ -77,3 +77,91 @@ button {
   white-space: nowrap;
   border: 0;
 }
+
+
+/* Transição entre páginas */
+.troca-pagina-enter-active,
+.troca-pagina-leave-active {
+  transition:
+    opacity 250ms ease,
+    transform 250ms ease;
+}
+
+.troca-pagina-enter-from {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+.troca-pagina-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+/* Respeitar configurações de acessibilidade */
+@media (prefers-reduced-motion: reduce) {
+  .troca-pagina-enter-active,
+  .troca-pagina-leave-active {
+    transition: none;
+  }
+}
+
+
+/* Entrada suave dos elementos */
+@keyframes surgir {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Visão Geral */
+.visao-geral__kpis > *,
+.visao-geral__detalhes > * {
+  animation: surgir 550ms ease-out both;
+}
+
+.visao-geral__kpis > :nth-child(2) {
+  animation-delay: 90ms;
+}
+
+.visao-geral__kpis > :nth-child(3) {
+  animation-delay: 180ms;
+}
+
+.visao-geral__detalhes > :nth-child(2) {
+  animation-delay: 120ms;
+}
+
+/* Correlação Climática */
+.correlacao__grafico,
+.correlacao__indicadores > *,
+.correlacao__lateral > * {
+  animation: surgir 550ms ease-out both;
+}
+
+.correlacao__indicadores > :nth-child(2) {
+  animation-delay: 90ms;
+}
+
+.correlacao__indicadores > :nth-child(3) {
+  animation-delay: 180ms;
+}
+
+.correlacao__lateral > :nth-child(2) {
+  animation-delay: 120ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .visao-geral__kpis > *,
+  .visao-geral__detalhes > *,
+  .correlacao__grafico,
+  .correlacao__indicadores > *,
+  .correlacao__lateral > * {
+    animation: none;
+  }
+}

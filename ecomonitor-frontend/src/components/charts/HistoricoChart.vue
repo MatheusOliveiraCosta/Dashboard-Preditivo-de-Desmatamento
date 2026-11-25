@@ -80,7 +80,14 @@ function criar() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: { duration: 300 },
+      
+      animation: {
+        duration: window.matchMedia(
+          '(prefers-reduced-motion: reduce)'
+        ).matches ? 0 : 700,
+        easing: 'easeOutQuart',
+      },
+
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },

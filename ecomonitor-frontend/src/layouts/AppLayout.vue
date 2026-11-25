@@ -14,9 +14,18 @@ const larguraTotal = computed(() => route.meta.larguraTotal === true)
     <AppSidebar />
     <AppHeader />
     <main class="layout__conteudo" :class="{ 'layout__conteudo--total': larguraTotal }">
-      <div class="layout__container">
-        <RouterView />
-      </div>
+
+    <div class="layout__container">
+      <RouterView v-slot="{ Component, route }">
+        <Transition name="troca-pagina" mode="out-in">
+          <component
+            :is="Component"
+            :key="route.path"
+          />
+        </Transition>
+      </RouterView>
+    </div>
+
     </main>
   </div>
 </template>
