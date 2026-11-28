@@ -25,7 +25,7 @@ ANO_MIN = 2004
 
 # Último ano carregado. O ano PRODES corrente ainda é parcial (a taxa só é
 # consolidada meses depois), então fica de fora para não distorcer o modelo.
-ANO_MAX = 2026
+ANO_MAX = 2025
 
 # Unidade dos valores do arquivo do MapBiomas: "ha" ou "km2"
 MAPBIOMAS_UNIDADE = "ha"
@@ -51,8 +51,8 @@ ANOS_PROJECAO = int(os.getenv("ANOS_PROJECAO", "7"))   # anos à frente
 JANELA_MODELO = int(os.getenv("JANELA_MODELO", "15"))  # usa só os últimos N anos
 MIN_ANOS_MODELO = int(os.getenv("MIN_ANOS_MODELO", "8"))  # mínimo de anos para projetar
 
-# Reescrita opcional dos textos com Gemini. Sem chave E modelo, usa só o template.
+# Reescrita opcional dos textos com Gemini. Sem chave, usa só o template.
 # O nome do modelo muda com o tempo: confira o atual em https://ai.google.dev/gemini-api/docs/models
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or None
-GEMINI_MODEL = os.getenv("GEMINI_MODEL") or None
+GEMINI_MODEL = os.getenv("GEMINI_MODEL") or "gemini-3.5-flash-lite"
 USAR_LLM = True  # run_etl.py coloca False com --sem-llm

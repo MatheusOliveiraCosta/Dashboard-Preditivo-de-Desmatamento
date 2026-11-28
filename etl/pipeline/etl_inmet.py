@@ -10,16 +10,39 @@ from .common import ler_tabela, lookup_localidades, normalizar
 HORAS_ANO = 8760
 
 
+def _eh_ponteiro_lfs(caminho) -> bool:
+    with open(caminho, "rb") as f:
+        return f.read(32).startswith(b"version https://git-lfs")
+
+
 def _arquivos_csv():
+    zips_lidos = 0
+    csvs_lidos = 0
     for caminho in sorted(config.INMET_DIR.rglob("*")):
+        if not caminho.is_file():
+            continue
         sufixo = caminho.suffix.lower()
         if sufixo == ".zip":
-            with zipfile.ZipFile(caminho) as z:
-                for nome in z.namelist():
-                    if nome.lower().endswith(".csv"):
-                        yield nome, z.read(nome)
+            if _eh_ponteiro_lfs(caminho):
+                raise RuntimeError(
+                    f"{caminho.name} é um ponteiro Git LFS, não um ZIP real. "
+                    "Rode `git lfs pull` para baixar os arquivos."
+                )
+            try:
+                with zipfile.ZipFile(caminho) as z:
+                    zips_lidos += 1
+                    for nome in z.namelist():
+                        if nome.lower().endswith(".csv"):
+                            conteudo = z.read(nome)
+                            csvs_lidos += 1
+                            yield nome, conteudo
+            except zipfile.BadZipFile:
+                print(f"  [INMET] ignorando ZIP corrompido: {caminho.name}")
+                continue
         elif sufixo == ".csv" and caminho.name != config.INMET_ESTACOES_BIOMA.name:
+            csvs_lidos += 1
             yield caminho.name, caminho.read_bytes()
+    print(f"  [INMET] {zips_lidos} ZIP(s) e {csvs_lidos} CSV(s) lidos")
 
 
 def _ler_estacao(conteudo: bytes):

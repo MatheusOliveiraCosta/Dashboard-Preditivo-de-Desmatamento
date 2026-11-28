@@ -7,24 +7,25 @@ import json
 
 from . import config, consultas, estatistica, modelo, textos
 
-
 def _reescritor():
     if not (config.USAR_LLM and config.GEMINI_API_KEY and config.GEMINI_MODEL):
         return None
     base = textos.criar_reescritor_gemini(config.GEMINI_API_KEY, config.GEMINI_MODEL)
+    aceita_contexto = getattr(base, "_aceita_contexto", False)
     falhas = {"seguidas": 0}
 
-    def resiliente(texto):
+    def resiliente(texto, tela=None, metricas=None):
         if falhas["seguidas"] >= 3:  # desiste do LLM (cota/chave) e segue só com templates
             return None
         try:
-            saida = base(texto)
+            saida = base(texto, tela=tela, metricas=metricas) if aceita_contexto else base(texto)
             falhas["seguidas"] = 0
             return saida
         except Exception:
             falhas["seguidas"] += 1
             raise
 
+    resiliente._aceita_contexto = aceita_contexto
     return resiliente
 
 

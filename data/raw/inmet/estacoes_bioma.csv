@@ -1,0 +1,655 @@
+codigo;bioma
+A001;Cerrado
+A002;Cerrado
+A003;Cerrado
+A005;Cerrado
+A009;Cerrado
+A010;Cerrado
+A011;Mata Atlântica
+A012;Cerrado
+A013;Cerrado
+A014;Cerrado
+A015;Cerrado
+A016;Cerrado
+A017;Cerrado
+A018;Cerrado
+A019;Cerrado
+A020;Cerrado
+A021;Cerrado
+A022;Cerrado
+A023;Cerrado
+A024;Cerrado
+A025;Cerrado
+A026;Cerrado
+A027;Cerrado
+A028;Cerrado
+A029;Cerrado
+A031;Cerrado
+A032;Cerrado
+A033;Cerrado
+A034;Cerrado
+A035;Cerrado
+A036;Cerrado
+A037;Cerrado
+A038;Cerrado
+A039;Cerrado
+A040;Cerrado
+A041;Cerrado
+A042;Cerrado
+A043;Cerrado
+A044;Cerrado
+A045;Cerrado
+A046;Cerrado
+A047;Cerrado
+A048;Amazônia
+A049;Cerrado
+A050;Cerrado
+A051;Cerrado
+A052;Cerrado
+A053;Cerrado
+A054;Cerrado
+A055;Cerrado
+A056;Cerrado
+A101;Amazônia
+A102;Amazônia
+A104;Amazônia
+A108;Amazônia
+A109;Amazônia
+A110;Amazônia
+A111;Amazônia
+A112;Amazônia
+A113;Amazônia
+A117;Amazônia
+A119;Amazônia
+A120;Amazônia
+A121;Amazônia
+A122;Amazônia
+A123;Amazônia
+A124;Amazônia
+A125;Amazônia
+A126;Amazônia
+A128;Amazônia
+A133;Amazônia
+A134;Amazônia
+A135;Amazônia
+A136;Amazônia
+A137;Amazônia
+A138;Amazônia
+A140;Amazônia
+A144;Amazônia
+A201;Amazônia
+A202;Amazônia
+A203;Amazônia
+A204;Cerrado
+A205;Cerrado
+A206;Cerrado
+A207;Cerrado
+A209;Amazônia
+A210;Amazônia
+A211;Amazônia
+A212;Amazônia
+A213;Amazônia
+A214;Amazônia
+A215;Amazônia
+A216;Amazônia
+A217;Amazônia
+A218;Cerrado
+A219;Amazônia
+A220;Amazônia
+A221;Cerrado
+A222;Cerrado
+A223;Cerrado
+A224;Cerrado
+A225;Cerrado
+A226;Amazônia
+A227;Amazônia
+A228;Amazônia
+A229;Amazônia
+A230;Amazônia
+A231;Amazônia
+A232;Amazônia
+A233;Amazônia
+A234;Amazônia
+A235;Amazônia
+A236;Amazônia
+A237;Cerrado
+A238;Amazônia
+A239;Amazônia
+A240;Amazônia
+A241;Cerrado
+A242;Amazônia
+A244;Amazônia
+A245;Amazônia
+A246;Amazônia
+A247;Amazônia
+A248;Amazônia
+A249;Amazônia
+A250;Amazônia
+A251;Amazônia
+A252;Amazônia
+A253;Amazônia
+A254;Amazônia
+A255;Amazônia
+A256;Cerrado
+A301;Mata Atlântica
+A303;Mata Atlântica
+A304;Mata Atlântica
+A305;Caatinga
+A306;Caatinga
+A307;Caatinga
+A308;Caatinga
+A309;Caatinga
+A310;Caatinga
+A311;Cerrado
+A312;Cerrado
+A313;Caatinga
+A314;Caatinga
+A315;Caatinga
+A316;Caatinga
+A317;Caatinga
+A318;Caatinga
+A319;Caatinga
+A320;Mata Atlântica
+A321;Caatinga
+A322;Caatinga
+A323;Caatinga
+A324;Caatinga
+A325;Caatinga
+A326;Cerrado
+A327;Caatinga
+A328;Caatinga
+A329;Caatinga
+A330;Caatinga
+A331;Caatinga
+A332;Caatinga
+A333;Caatinga
+A334;Caatinga
+A335;Cerrado
+A336;Caatinga
+A337;Caatinga
+A339;Caatinga
+A340;Caatinga
+A341;Mata Atlântica
+A342;Caatinga
+A343;Caatinga
+A344;Mata Atlântica
+A345;Caatinga
+A346;Cerrado
+A347;Caatinga
+A348;Caatinga
+A349;Caatinga
+A350;Caatinga
+A351;Caatinga
+A352;Mata Atlântica
+A353;Mata Atlântica
+A354;Caatinga
+A355;Mata Atlântica
+A356;Mata Atlântica
+A357;Mata Atlântica
+A358;Caatinga
+A359;Caatinga
+A360;Caatinga
+A361;Cerrado
+A363;Cerrado
+A364;Cerrado
+A365;Caatinga
+A366;Caatinga
+A367;Caatinga
+A368;Caatinga
+A369;Caatinga
+A370;Caatinga
+A371;Caatinga
+A372;Caatinga
+A373;Caatinga
+A374;Cerrado
+A375;Cerrado
+A376;Cerrado
+A377;Cerrado
+A387;Caatinga
+A388;Mata Atlântica
+A389;Mata Atlântica
+A390;Mata Atlântica
+A401;Mata Atlântica
+A402;Cerrado
+A404;Cerrado
+A405;Mata Atlântica
+A406;Mata Atlântica
+A407;Mata Atlântica
+A408;Caatinga
+A409;Mata Atlântica
+A410;Mata Atlântica
+A412;Caatinga
+A413;Caatinga
+A414;Mata Atlântica
+A415;Caatinga
+A416;Caatinga
+A417;Caatinga
+A418;Caatinga
+A419;Caatinga
+A421;Mata Atlântica
+A422;Mata Atlântica
+A423;Caatinga
+A424;Caatinga
+A425;Caatinga
+A426;Caatinga
+A427;Mata Atlântica
+A428;Caatinga
+A429;Caatinga
+A430;Caatinga
+A431;Mata Atlântica
+A432;Caatinga
+A433;Caatinga
+A434;Mata Atlântica
+A436;Caatinga
+A437;Mata Atlântica
+A438;Mata Atlântica
+A439;Caatinga
+A440;Caatinga
+A441;Caatinga
+A442;Caatinga
+A443;Caatinga
+A444;Mata Atlântica
+A445;Mata Atlântica
+A446;Mata Atlântica
+A447;Mata Atlântica
+A448;Caatinga
+A450;Caatinga
+A451;Caatinga
+A452;Cerrado
+A453;Caatinga
+A455;Mata Atlântica
+A456;Mata Atlântica
+A458;Caatinga
+A472;Mata Atlântica
+A502;Mata Atlântica
+A505;Cerrado
+A506;Cerrado
+A507;Cerrado
+A508;Mata Atlântica
+A509;Mata Atlântica
+A510;Mata Atlântica
+A511;Mata Atlântica
+A512;Cerrado
+A513;Mata Atlântica
+A514;Mata Atlântica
+A515;Mata Atlântica
+A516;Cerrado
+A517;Mata Atlântica
+A518;Mata Atlântica
+A519;Cerrado
+A520;Mata Atlântica
+A521;Mata Atlântica
+A522;Mata Atlântica
+A523;Cerrado
+A524;Mata Atlântica
+A525;Mata Atlântica
+A526;Caatinga
+A527;Mata Atlântica
+A528;Cerrado
+A529;Mata Atlântica
+A530;Mata Atlântica
+A531;Mata Atlântica
+A532;Mata Atlântica
+A533;Mata Atlântica
+A534;Mata Atlântica
+A535;Cerrado
+A536;Cerrado
+A537;Cerrado
+A538;Cerrado
+A539;Caatinga
+A540;Mata Atlântica
+A541;Cerrado
+A542;Cerrado
+A543;Caatinga
+A544;Cerrado
+A545;Cerrado
+A546;Cerrado
+A547;Cerrado
+A548;Cerrado
+A549;Mata Atlântica
+A550;Mata Atlântica
+A551;Cerrado
+A552;Mata Atlântica
+A553;Cerrado
+A554;Mata Atlântica
+A555;Mata Atlântica
+A556;Mata Atlântica
+A557;Mata Atlântica
+A559;Caatinga
+A560;Cerrado
+A561;Mata Atlântica
+A562;Cerrado
+A563;Caatinga
+A564;Cerrado
+A565;Cerrado
+A566;Mata Atlântica
+A567;Mata Atlântica
+A568;Cerrado
+A569;Cerrado
+A570;Mata Atlântica
+A571;Cerrado
+A572;Mata Atlântica
+A601;Mata Atlântica
+A602;Mata Atlântica
+A603;Mata Atlântica
+A604;Mata Atlântica
+A606;Mata Atlântica
+A607;Mata Atlântica
+A608;Mata Atlântica
+A609;Mata Atlântica
+A610;Mata Atlântica
+A611;Mata Atlântica
+A612;Mata Atlântica
+A613;Mata Atlântica
+A614;Mata Atlântica
+A615;Mata Atlântica
+A616;Mata Atlântica
+A617;Mata Atlântica
+A618;Mata Atlântica
+A619;Mata Atlântica
+A620;Mata Atlântica
+A621;Mata Atlântica
+A622;Mata Atlântica
+A624;Mata Atlântica
+A625;Mata Atlântica
+A626;Mata Atlântica
+A627;Mata Atlântica
+A628;Mata Atlântica
+A629;Mata Atlântica
+A630;Mata Atlântica
+A631;Mata Atlântica
+A632;Mata Atlântica
+A633;Mata Atlântica
+A634;Mata Atlântica
+A636;Mata Atlântica
+A637;Mata Atlântica
+A652;Mata Atlântica
+A657;Mata Atlântica
+A659;Mata Atlântica
+A667;Mata Atlântica
+A701;Mata Atlântica
+A702;Cerrado
+A703;Cerrado
+A704;Cerrado
+A705;Cerrado
+A706;Mata Atlântica
+A707;Mata Atlântica
+A708;Cerrado
+A709;Mata Atlântica
+A710;Cerrado
+A711;Cerrado
+A712;Mata Atlântica
+A713;Mata Atlântica
+A714;Mata Atlântica
+A715;Mata Atlântica
+A716;Mata Atlântica
+A717;Pantanal
+A718;Cerrado
+A719;Cerrado
+A720;Cerrado
+A721;Cerrado
+A722;Cerrado
+A723;Pantanal
+A724;Pantanal
+A725;Cerrado
+A726;Mata Atlântica
+A727;Mata Atlântica
+A728;Mata Atlântica
+A730;Cerrado
+A731;Cerrado
+A732;Cerrado
+A733;Mata Atlântica
+A734;Mata Atlântica
+A735;Mata Atlântica
+A736;Mata Atlântica
+A737;Mata Atlântica
+A738;Mata Atlântica
+A739;Mata Atlântica
+A740;Mata Atlântica
+A741;Mata Atlântica
+A742;Cerrado
+A743;Cerrado
+A744;Mata Atlântica
+A746;Mata Atlântica
+A747;Mata Atlântica
+A748;Cerrado
+A749;Mata Atlântica
+A750;Cerrado
+A751;Mata Atlântica
+A752;Mata Atlântica
+A753;Mata Atlântica
+A754;Cerrado
+A755;Mata Atlântica
+A756;Cerrado
+A758;Cerrado
+A759;Cerrado
+A760;Cerrado
+A761;Cerrado
+A762;Mata Atlântica
+A763;Mata Atlântica
+A764;Cerrado
+A765;Mata Atlântica
+A766;Mata Atlântica
+A768;Mata Atlântica
+A769;Mata Atlântica
+A770;Cerrado
+A771;Mata Atlântica
+A772;Cerrado
+A801;Pampa
+A802;Pampa
+A803;Pampa
+A804;Pampa
+A805;Mata Atlântica
+A806;Mata Atlântica
+A807;Mata Atlântica
+A809;Pampa
+A810;Mata Atlântica
+A811;Pampa
+A812;Pampa
+A813;Pampa
+A814;Mata Atlântica
+A815;Mata Atlântica
+A816;Mata Atlântica
+A817;Mata Atlântica
+A818;Mata Atlântica
+A819;Mata Atlântica
+A820;Mata Atlântica
+A821;Mata Atlântica
+A822;Mata Atlântica
+A823;Mata Atlântica
+A824;Mata Atlântica
+A825;Mata Atlântica
+A826;Pampa
+A827;Pampa
+A828;Mata Atlântica
+A829;Mata Atlântica
+A830;Pampa
+A831;Pampa
+A832;Pampa
+A833;Pampa
+A834;Pampa
+A835;Mata Atlântica
+A836;Pampa
+A837;Mata Atlântica
+A838;Pampa
+A839;Pampa
+A840;Mata Atlântica
+A841;Mata Atlântica
+A842;Mata Atlântica
+A843;Mata Atlântica
+A844;Mata Atlântica
+A845;Mata Atlântica
+A846;Mata Atlântica
+A848;Mata Atlântica
+A849;Mata Atlântica
+A850;Mata Atlântica
+A851;Mata Atlântica
+A852;Pampa
+A853;Mata Atlântica
+A854;Mata Atlântica
+A855;Mata Atlântica
+A856;Pampa
+A857;Mata Atlântica
+A858;Mata Atlântica
+A859;Mata Atlântica
+A860;Mata Atlântica
+A861;Mata Atlântica
+A862;Mata Atlântica
+A863;Mata Atlântica
+A864;Mata Atlântica
+A865;Mata Atlântica
+A866;Mata Atlântica
+A867;Mata Atlântica
+A868;Mata Atlântica
+A869;Mata Atlântica
+A870;Mata Atlântica
+A871;Mata Atlântica
+A872;Mata Atlântica
+A873;Mata Atlântica
+A874;Mata Atlântica
+A875;Mata Atlântica
+A876;Mata Atlântica
+A878;Pampa
+A879;Mata Atlântica
+A880;Mata Atlântica
+A881;Pampa
+A882;Mata Atlântica
+A883;Mata Atlântica
+A884;Mata Atlântica
+A886;Pampa
+A887;Pampa
+A889;Pampa
+A893;Pampa
+A894;Mata Atlântica
+A895;Mata Atlântica
+A897;Mata Atlântica
+A898;Mata Atlântica
+A899;Pampa
+A901;Cerrado
+A902;Amazônia
+A903;Amazônia
+A904;Cerrado
+A905;Cerrado
+A906;Amazônia
+A907;Cerrado
+A908;Cerrado
+A909;Cerrado
+A910;Amazônia
+A911;Cerrado
+A912;Cerrado
+A913;Amazônia
+A914;Amazônia
+A915;Cerrado
+A916;Amazônia
+A917;Amazônia
+A919;Amazônia
+A920;Amazônia
+A921;Cerrado
+A922;Amazônia
+A923;Cerrado
+A924;Amazônia
+A925;Amazônia
+A926;Amazônia
+A927;Cerrado
+A928;Amazônia
+A929;Cerrado
+A930;Amazônia
+A931;Cerrado
+A932;Cerrado
+A933;Cerrado
+A934;Cerrado
+A935;Cerrado
+A936;Amazônia
+A937;Amazônia
+A938;Cerrado
+A939;Amazônia
+A940;Amazônia
+A942;Amazônia
+A943;Amazônia
+A944;Cerrado
+A945;Cerrado
+A946;Amazônia
+A947;Cerrado
+A948;Cerrado
+A949;Cerrado
+A950;Amazônia
+A951;Amazônia
+A952;Amazônia
+A953;Amazônia
+A954;Cerrado
+A955;Cerrado
+A956;Cerrado
+A957;Cerrado
+A958;Cerrado
+A959;Amazônia
+A960;Amazônia
+A961;Amazônia
+A962;Cerrado
+A963;Cerrado
+A964;Amazônia
+A965;Amazônia
+A966;Pantanal
+A967;Amazônia
+A968;Amazônia
+A969;Cerrado
+A970;Amazônia
+B803;Mata Atlântica
+B804;Mata Atlântica
+B806;Mata Atlântica
+B807;Pampa
+B808;Pampa
+B809;Pampa
+B810;Pampa
+B811;Pampa
+B812;Pampa
+B813;Pampa
+B814;Pampa
+B815;Pampa
+B816;Mata Atlântica
+B817;Mata Atlântica
+B818;Mata Atlântica
+B819;Mata Atlântica
+B820;Mata Atlântica
+B821;Pampa
+B822;Pampa
+B823;Pampa
+B824;Pampa
+B825;Pampa
+B826;Pampa
+B827;Pampa
+B828;Pampa
+B829;Pampa
+B830;Pampa
+B831;Pampa
+B832;Mata Atlântica
+B833;Pampa
+B834;Pampa
+B835;Pampa
+B836;Pampa
+B837;Mata Atlântica
+B838;Pampa
+B839;Mata Atlântica
+B840;Mata Atlântica
+B841;Mata Atlântica
+B842;Pampa
+B843;Mata Atlântica
+B844;Mata Atlântica
+B845;Mata Atlântica
+B846;Mata Atlântica
+B847;Pampa
+B848;Pampa
+B849;Pampa
+B850;Pampa
+B851;Pampa
+B852;Pampa
+B853;Pampa
+B854;Mata Atlântica
+B855;Pampa
+B856;Mata Atlântica
+B857;Mata Atlântica
+B858;Mata Atlântica
+B859;Mata Atlântica
+B860;Mata Atlântica
+B861;Mata Atlântica
+B862;Pampa
+F501;Mata Atlântica

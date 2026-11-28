@@ -1,0 +1,146 @@
+year;area km²;bioma
+2026;3.362,94;Amazônia
+2025;5.110,68;Amazônia
+2024;6.070,82;Amazônia
+2023;7.806,28;Amazônia
+2022;12.473,98;Amazônia
+2021;12.177,19;Amazônia
+2020;10.351,51;Amazônia
+2019;10.700,58;Amazônia
+2018;6.957,77;Amazônia
+2017;6.758,36;Amazônia
+2016;7.077,57;Amazônia
+2015;5.908,73;Amazônia
+2014;4.870,93;Amazônia
+2013;5.147,83;Amazônia
+2012;4.127,21;Amazônia
+2011;5.394,37;Amazônia
+2010;5.829,17;Amazônia
+2009;5.873,04;Amazônia
+2008;12.398,68;Amazônia
+2025;2.289,54;Caatinga
+2024;3.484,38;Caatinga
+2023;3.169,61;Caatinga
+2022;2.627,63;Caatinga
+2021;2.096,16;Caatinga
+2020;2.226,05;Caatinga
+2019;1.868,16;Caatinga
+2018;2.169,55;Caatinga
+2017;2.246,17;Caatinga
+2016;2.432,87;Caatinga
+2015;2.432,87;Caatinga
+2014;3.602,16;Caatinga
+2013;3.947,56;Caatinga
+2012;3.947,56;Caatinga
+2011;4.059,43;Caatinga
+2010;3.943,08;Caatinga
+2009;3.943,08;Caatinga
+2008;6.351,46;Caatinga
+2007;6.351,46;Caatinga
+2006;8.172,60;Caatinga
+2005;8.172,60;Caatinga
+2004;12.186,41;Caatinga
+2003;12.186,41;Caatinga
+2002;12.186,41;Caatinga
+2001;12.186,41;Caatinga
+2026;5.516,69;Cerrado
+2025;7.235,27;Cerrado
+2024;8.174,17;Cerrado
+2023;11.011,69;Cerrado
+2022;10.688,61;Cerrado
+2021;8.531,44;Cerrado
+2020;7.902,65;Cerrado
+2019;6.319,02;Cerrado
+2018;7.259,82;Cerrado
+2017;7.117,38;Cerrado
+2016;7.497,12;Cerrado
+2015;11.131,65;Cerrado
+2014;10.904,42;Cerrado
+2013;13.481,60;Cerrado
+2012;8.976,17;Cerrado
+2011;8.976,17;Cerrado
+2010;9.910,34;Cerrado
+2009;9.910,34;Cerrado
+2008;13.311,56;Cerrado
+2007;13.311,56;Cerrado
+2006;16.877,45;Cerrado
+2005;16.877,45;Cerrado
+2004;28.770,33;Cerrado
+2003;28.770,33;Cerrado
+2002;26.933,02;Cerrado
+2001;26.933,02;Cerrado
+2025;402,36;Mata Atlântica
+2024;475,18;Mata Atlântica
+2023;765,17;Mata Atlântica
+2022;1.032,66;Mata Atlântica
+2021;926,98;Mata Atlântica
+2020;790,61;Mata Atlântica
+2019;1.067,37;Mata Atlântica
+2018;1.344,35;Mata Atlântica
+2017;1.166,12;Mata Atlântica
+2016;1.206,65;Mata Atlântica
+2015;1.206,65;Mata Atlântica
+2014;1.887,33;Mata Atlântica
+2013;1.427,80;Mata Atlântica
+2012;1.427,80;Mata Atlântica
+2011;1.879,88;Mata Atlântica
+2010;2.020,43;Mata Atlântica
+2009;2.020,43;Mata Atlântica
+2008;4.004,42;Mata Atlântica
+2007;4.004,42;Mata Atlântica
+2006;6.384,15;Mata Atlântica
+2005;6.384,15;Mata Atlântica
+2004;5.625,91;Mata Atlântica
+2003;5.625,91;Mata Atlântica
+2002;5.625,91;Mata Atlântica
+2001;5.625,91;Mata Atlântica
+2025;305,48;Pampa
+2024;524,19;Pampa
+2023;654,58;Pampa
+2022;755,25;Pampa
+2021;1.526,57;Pampa
+2020;888,62;Pampa
+2019;1.027,40;Pampa
+2018;917,77;Pampa
+2017;925,88;Pampa
+2016;924,38;Pampa
+2015;924,38;Pampa
+2014;2.118,72;Pampa
+2013;1.125,97;Pampa
+2012;1.125,97;Pampa
+2011;1.699,81;Pampa
+2010;1.027,92;Pampa
+2009;1.027,92;Pampa
+2008;1.449,72;Pampa
+2007;1.449,72;Pampa
+2006;2.004,36;Pampa
+2005;2.004,36;Pampa
+2004;2.866,00;Pampa
+2003;2.866,00;Pampa
+2002;2.866,00;Pampa
+2001;2.866,00;Pampa
+2025;291,21;Pantanal
+2024;842,44;Pantanal
+2023;723,13;Pantanal
+2022;789,41;Pantanal
+2021;824,47;Pantanal
+2020;677,86;Pantanal
+2019;514,48;Pantanal
+2018;498,52;Pantanal
+2017;711,60;Pantanal
+2016;618,55;Pantanal
+2015;618,55;Pantanal
+2014;369,73;Pantanal
+2013;429,83;Pantanal
+2012;429,83;Pantanal
+2011;510,39;Pantanal
+2010;664,89;Pantanal
+2009;664,89;Pantanal
+2008;518,45;Pantanal
+2007;518,45;Pantanal
+2006;845,96;Pantanal
+2005;845,96;Pantanal
+2004;1.000,06;Pantanal
+2003;1.000,06;Pantanal
+2002;1.000,06;Pantanal
+2001;1.000,06;Pantanal
